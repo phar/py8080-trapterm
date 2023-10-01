@@ -19,7 +19,7 @@ class TextVideoDisplay:
 		
 #		self._memory = cpu.RAM((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) * (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1])+1) #fixme
 #		self._memory = [0] * ((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) * (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1])+1)
-		self._char_rom = [self.open_rom("roms/90288-002.bin"),self.open_rom("roms/90288-003.bin")
+		self._char_rom = [self.open_rom("roms/90288-002.bin"),self.open_rom("roms/90288-003.bin")]
 		self._display_size = ((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) , (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1]))
 		pygame.init()
 		
