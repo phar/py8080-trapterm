@@ -3,43 +3,31 @@ class IOException(Exception):
 
 
 class IO:
-    """
-    Input and output ports for 8080
-    """
+	"""
+	Input and output ports for 8080
+	"""
 
-    def __init__(self):
-        self.out_port2 = 0
-        self.out_port3 = 0
-        self.out_port4_low = 0
-        self.out_port4_high = 0
-        self.out_port5 = 0
-        self.in_port1 = 0
-        self.in_port2 = 0
+	def __init__(self):
+		self.ioport_w_callbacks = {}
+		self.ioport_r_callbacks = {}
 
-    def output(self, port, value):
-        if port == 2:
-            self.out_port2 = value
-        elif port == 3:
-            self.out_port3 = value
-        elif port == 4:
-            self.out_port4_low = self.out_port4_high
-            self.out_port4_high = value
-        elif port == 5:
-            self.out_port5 = value
+	
+	def register_ioport(self, port, modes, callback):
+		if "r" in modes:
+			self.ioport_r_callbacks[port] = callback
+		if "w" in modes:
+			self.ioport_w_callbacks[port] = callback
 
-    def input(self, port):
-        if port == 1:
-            result = self.in_port1
-            self.in_port1 &= 0xFE
-        elif port == 2:
-            result = (self.in_port2 & 0x8F) | (self.in_port2 & 0x70)
-        elif port == 3:
-            out_port4 = (self.out_port4_high << 8) | self.out_port4_low
-            result = ((out_port4 << self.out_port2) >> 8) & 0xFF
-        else:
-            result = 0
+	def output(self, port, value):
+		if port in self.ioport_w_callbacks:
+			self.ioport_w_callbacks[port](port,"w", value)
+		else:
+			print("out 0x%02x %02x" % (port, value))
 
-        if result > 255:
-            raise IOException('Invalid result={}'.format(result))
 
-        return result
+	def input(self, port):
+		if port in self.ioport_r_callbacks:
+			return self.ioport_r_callbacks[port](port, "r", None)
+		else:
+			print("in 0x%02x" % port)
+			return 0xff
