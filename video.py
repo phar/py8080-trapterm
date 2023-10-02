@@ -7,7 +7,7 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 #ASPECT_RATIO = MIN_WIDTH / MIN_HEIGHT
 
-FONT_RESOLUTION = (8,8 )
+FONT_RESOLUTION = (8,12 )
 CHAR_RESOLUTION = (40,16)
 SCALE_FACTOR = 1
 
@@ -75,17 +75,22 @@ class TextVideoDisplay:
 		"""
 		px_array = pygame.PixelArray(self.surface)
 
-		for i in range(0,self._display_size[0], FONT_RESOLUTION[0]):
-			for j in range(0,self._display_size[1] ,FONT_RESOLUTION[1]):
-				memaddr = 0xc000 + int( ((i / FONT_RESOLUTION[0]) *CHAR_RESOLUTION[0]) + (j / FONT_RESOLUTION[1]) )
-#				memaddr = int(0xc050)
+		for j in range(0, CHAR_RESOLUTION[1]):
+			for i in range(0, CHAR_RESOLUTION[0]):
+				memaddr = 0xc000 + (j * CHAR_RESOLUTION[0]) + i
+				
 				for e in range(FONT_RESOLUTION[0]):
-					for o in range(FONT_RESOLUTION[1]):
-#						self._cpu._memory.memory[memaddr] = ord("H")
-						if self._char_rom[0][(self._cpu._memory.memory[memaddr] * FONT_RESOLUTION[0])+e] & 0x01 << o:
-							px_array[i+o][j+e] = WHITE
+					for o in range(8):
+						if self._char_rom[0][(self._cpu._memory.memory[memaddr] * 8)+o] & 0x01 << e:
+							px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o] = WHITE
 						else:
-							px_array[i+o][j+e] = BLACK
+							px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o] = BLACK
+
+						if o < 3:
+							if self._char_rom[1][(self._cpu._memory.memory[memaddr] * 8)+o] & 0x01 << e:
+								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = WHITE
+							else:
+								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = BLACK
 
 		del(px_array)
 
