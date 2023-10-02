@@ -294,7 +294,10 @@ class CPU:
 					ret = self.registers["de"].value
 				elif a == "SP":
 					ret = self.registers["sp"].value
+				elif a == "PSW":
+					ret = self.registers["f"].value
 				
+
 			if ret is not None:
 				args.append(ret)
 
@@ -366,7 +369,9 @@ class CPU:
 						self.registers["hl"].value = result
 					elif instruction["arg"][0] == "D":
 						self.registers["de"].value = result
-					
+					elif instruction["arg"][0] == "PSW":
+						self.registers["f"].value = result
+
 				self.registers["cycles"].value += cycles
 			else:
 				print("UNHANDLED2!", instruction["opstr"])

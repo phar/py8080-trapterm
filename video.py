@@ -64,7 +64,6 @@ class TextVideoDisplay:
 	def display_access(self, address, value, action):
 		if action == "w":
 			self._refresh()
-		print("access display %04x" % address)
 		return self._cpu._memory.memory[address]
 
 	def _refresh(self):
@@ -93,7 +92,4 @@ class TextVideoDisplay:
 								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = BLACK
 
 		del(px_array)
-
-    # Update the display
 		pygame.display.flip()
-#```

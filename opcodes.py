@@ -12,6 +12,33 @@ TYPE_MOVE_16	= 3
 TYPE_LOGIC_8	= 4
 TYPE_LOGIC_16	= 5
 
+ARG_TYPE_A  = 0
+ARG_TYPE_B  = 1
+ARG_TYPE_C  = 2
+ARG_TYPE_H  = 3
+ARG_TYPE_L  = 4
+ARG_TYPE_D  = 5
+ARG_TYPE_E  = 6
+ARG_TYPE_SP  = 7
+ARG_TYPE_M  = 8
+ARG_TYPE_0  = 9
+ARG_TYPE_1  = 10
+ARG_TYPE_2  = 11
+ARG_TYPE_3  = 12
+ARG_TYPE_4  = 13
+ARG_TYPE_5  = 14
+ARG_TYPE_6  = 15
+ARG_TYPE_7  = 16
+ARG_TYPE_d8  = 17
+ARG_TYPE_d16  = 18
+ARG_TYPE_a16  = 19
+ARG_TYPE_PSW  = 20
+
+
+
+
+
+
 Opcodes8080 = [{'arg': [],
   'l': 1,
   'f': { },
@@ -74,7 +101,7 @@ Opcodes8080 = [{'arg': [],
   'c': [4,4],
   'type':TYPE_MISC,
   'op':   8,
-  'opstr': '*NOP'},
+  'opstr': 'NOP'},
  {'arg': ['B'],
   'l': 1,
   'f': {   'C': True,    },
@@ -186,7 +213,7 @@ Opcodes8080 = [{'arg': [],
   'c': [4,4],
   'type':TYPE_MISC,
   'op':   24,
-  'opstr': '*NOP'},
+  'opstr': 'NOP'},
  {'arg': ['D'],
   'l': 1,
   'f': {   'C': True,    },
@@ -298,7 +325,7 @@ Opcodes8080 = [{'arg': [],
   'c': [4,4],
   'type':TYPE_MISC,
   'op':   40,
-  'opstr': '*NOP'},
+  'opstr': 'NOP'},
  {'arg': ['H'],
   'l': 1,
   'f': {   'C': True,    },
@@ -410,7 +437,7 @@ Opcodes8080 = [{'arg': [],
   'c': [4,4],
   'type':TYPE_MISC,
   'op':   56,
-  'opstr': '*NOP'},
+  'opstr': 'NOP'},
  {'arg': ['SP'],
   'l': 1,
   'f': {   'C': True,    },
@@ -1437,7 +1464,7 @@ Opcodes8080 = [{'arg': [],
   'c': [10,10],
   'type':TYPE_BRANCH,
   'op':   203,
-  'opstr': '*JMP'},
+  'opstr': 'JMP'},
  {'arg': ['a16'],
   'f': { },
   'type':TYPE_BRANCH,
@@ -1532,7 +1559,7 @@ Opcodes8080 = [{'arg': [],
   'c': [10,10],
   'type':TYPE_BRANCH,
   'op':   217,
-  'opstr': '*RET'},
+  'opstr': 'RET'},
  {'arg': ['a16'],
   'l': 3,
   'f': { },
@@ -1559,7 +1586,7 @@ Opcodes8080 = [{'arg': [],
   'c': [17,17],
   'type':TYPE_BRANCH,
   'op':   221,
-  'opstr': '*CALL'},
+  'opstr': 'CALL'},
  {'arg': ['d8'],
   'l': 2,
   'f': { 'A': True,  'C': True,  'S': True,  'Z': True, 'P': True},
@@ -1667,7 +1694,7 @@ Opcodes8080 = [{'arg': [],
   'c': [17,17],
   'type':TYPE_BRANCH,
   'op':   237,
-  'opstr': '*CALL'},
+  'opstr': 'CALL'},
  {'arg': ['d8'],
   'l': 2,
   'f': { 'A': True,  'C': True,  'S': True,  'Z': True, 'P': True},
@@ -1774,7 +1801,7 @@ Opcodes8080 = [{'arg': [],
   'c': [17,17],
   'type':TYPE_BRANCH,
   'op':   253,
-  'opstr': '*CALL'},
+  'opstr': 'CALL'},
  {'arg': ['d8'],
   'l': 2,
   'f': { 'A': True,  'C': True,  'S': True,  'Z': True, 'P': True},

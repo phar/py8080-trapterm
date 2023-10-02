@@ -16,9 +16,9 @@ class Interface:
 		self._cpu = cpu
 		self.read_queue = queue.Queue()
 		self.write_queue = queue.Queue()
-		self.start()
+#		self.start()
 		self._printerfile = printerfile
-		self.printer = printer.Printer(self._printerfile); #printer hangs off interface card
+		self.printer = printer.Printer(self._cpu); #printer hangs off interface card
 
 		
 		self.status_reg = 0
@@ -31,7 +31,6 @@ class Interface:
 		self._cpu._io.register_ioport(0x58,"w",self.dummyio)
 		self._cpu._io.register_ioport(0x60,"r",self.dummyio)
 		self._cpu._io.register_ioport(0x60,"w",self.dummyio)
-		self._cpu._io.register_ioport(0x70,"r",self.dummyio)
 
 
 		self._cpu._io.register_ioport(0x68,"r",self.read_data)
@@ -42,6 +41,11 @@ class Interface:
 		
 		self._cpu._io.register_ioport(0x78,"r",self.get_status)
 		self._cpu._io.register_ioport(0x78,"w",self.set_status)
+
+		f = open("dummy.txt")
+		d = f.read(9999)
+		for i in d:
+			self.read_queue.put(i)
 
 	def set_status(self,port,mode,data):
 		self.status_reg  = data
@@ -55,46 +59,46 @@ class Interface:
 		return data
 			
 	def read_data(self,port,mode,data):
-		return self._io.input(a0)
+		return self.read_queue.get()
 
 
 	def dummyio(self,port,mode,data):
 #		print("IOCALL!",port,mode,data)
 		return 0xff #fixme
 
-	def start(self):
-		self.server_socket.bind((self.host, self.port))
-		self.server_socket.listen(1)
-		print(f"Server listening on {self.host}:{self.port}")
-
-		self.server_thread = threading.Thread(target=self.handle_client)
-		self.server_thread.start()
-
-	def handle_client(self):
-		while 1:
-			self.client_socket, client_address = self.server_socket.accept()
-			print(f"Connected to {client_address}")
-
-			try:
-				while True:
-					# Read data from the client
-					data = self.client_socket.recv(1024)
-					if not data:
-						break
-
-					# Put received data into the read queue
-					self.read_queue.put(data.decode())
-
-					# Check for data in the write queue and send it to the client
-					while not self.write_queue.empty():
-						message = self.write_queue.get()
-						self.client_socket.send(message.encode())
-
-			except Exception as e:
-				print(f"Error: {e}")
-			finally:
-				self.client_socket.close()
-				self.server_socket.close()
+#	def start(self):
+#		self.server_socket.bind((self.host, self.port))
+#		self.server_socket.listen(1)
+#		print(f"Server listening on {self.host}:{self.port}")
+#
+#		self.server_thread = threading.Thread(target=self.handle_client)
+#		self.server_thread.start()
+#
+#	def handle_client(self):
+#		while 1:
+#			self.client_socket, client_address = self.server_socket.accept()
+#			print(f"Connected to {client_address}")
+#
+#			try:
+#				while True:
+#					# Read data from the client
+#					data = self.client_socket.recv(1024)
+#					if not data:
+#						break
+#
+#					# Put received data into the read queue
+#					self.read_queue.put(data.decode())
+#
+#					# Check for data in the write queue and send it to the client
+#					while not self.write_queue.empty():
+#						message = self.write_queue.get()
+#						self.client_socket.send(message.encode())
+#
+#			except Exception as e:
+#				print(f"Error: {e}")
+#			finally:
+#				self.client_socket.close()
+#				self.server_socket.close()
 
 	def send_message(self, message):
 		self.write_queue.put(message)
@@ -104,20 +108,4 @@ class Interface:
 			return self.read_queue.get_nowait()
 		except queue.Empty:
 			return None
-
-if __name__ == "__main__":
-    server = SocketServer("localhost", 12345)
-    server.start()
-
-    while True:
-        message = input("Enter a message to send (or 'exit' to quit): ")
-        if message.lower() == "exit":
-            break
-        server.send_message(message)
-
-        received_message = server.receive_message()
-        if received_message:
-            print(f"Received: {received_message}")
-
-    server.server_thread.join()
 

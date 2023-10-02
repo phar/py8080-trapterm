@@ -31,6 +31,7 @@ class Emulator:
 #		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
 #		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
 
+
 		self._cpu.load_rom(0x0000,"roms/debug.bin")
 
 
@@ -40,11 +41,16 @@ class Emulator:
 			exit()
 
 		if event.type == pygame.KEYDOWN:
-			print("borp")
-			self._keybd.key_down_ascii(event.key )
+			if event.key == pygame.K_c and pygame.key.get_mods() & KMOD_CTRL:
+				self._keybd.set_moifier(True)
+			else:
+				self._keybd.key_down_ascii(event.key)
 
 		if event.type == pygame.KEYUP:
-			self._keybd.key_up_ascii(event.key )
+			if event.key == pygame.K_c and pygame.key.get_mods() & KMOD_CTRL:
+				self._keybd.set_moifier(False)
+			else:
+				self._keybd.key_up_ascii(event.key )
 
 		
 	def step(self, steps=1):
@@ -86,7 +92,6 @@ class Emulator:
 			for event in pygame.event.get():
 				self._handle(event)
 
-#			self._cpu.run()
 			for i in range(32):
 				isbp,x = self.step()
 				if break_interrupt == True or isbp:
@@ -94,7 +99,6 @@ class Emulator:
 					return True
 
 			fps_clock.tick(self._video._fps)
-			self._video._refresh()
 			pygame.display.update()
 		signal.signal(signal.SIGINT, signal.SIG_DFL)
 		return -1

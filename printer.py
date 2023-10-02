@@ -1,6 +1,7 @@
 import pygame
 import cpu
 import struct
+import io8080
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -14,3 +15,7 @@ class Printer:
 	def __init__(self,emucpu):
 		self._cpu = emucpu
 
+		self._cpu._io.register_ioport(0x70,"r",self.printer_status)
+
+	def printer_status(self,port,arg):
+		return 0 #fixme
