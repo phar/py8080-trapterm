@@ -126,7 +126,9 @@ class FLAGS_REGISTER(REGISTER_CELL):
 class CPU:
 #	VRAM_ADDRESS = 0x2400
 	
-	def __init__(self):
+	def __init__(self, parent, freq):
+		self.parent = parent
+		self.freq = freq
 		self.registers = {
 			"pc":REGISTER_CELL("pc",width=16),
 			"sp":REGISTER_CELL("sp",width=16),
@@ -140,10 +142,13 @@ class CPU:
 			"ie":REGISTER_CELL("ie",width=1),
 		}
 		self.breakpoints = []
-
+		self.timers = []
 		
 		self._io = io8080.IO()
 		self._memory = RAM(0xffff)
+
+	def add_timer(self, clock_ticks, callback):
+		self.timers.append((clock_ticks, callback))
 
 	@property
 	def memory(self):
@@ -315,15 +320,28 @@ class CPU:
 		:return:
 		"""
 
+		try:
 
-		instruction,args = self.decompose(self.registers["pc"].value)
-		self.registers["pc"].value += instruction["l"]
+			instruction,args = self.decompose(self.registers["pc"].value)
+		
+		
+		except Exception as e:
+			print("An error occurred while executing opcode %s at 0x%04x" % (instruction["opstr"], self.registers["pc"].value),args)
+			print(f"An error occurred: {e}")
 
 		if instruction is not None:
+			self.registers["pc"].value += instruction["l"]
+			cycles = 0
+
 			if hasattr(self, "_" + instruction["opstr"].lower()) and callable(getattr(self, "_" + instruction["opstr"].lower())):
 				method = getattr(self, "_" + instruction["opstr"].lower())
-				(cycles, result) = method(instruction, args[0],args[1])
-#storee phase
+				try:
+					(cycles, result) = method(instruction, args[0],args[1])
+				except Exception as e:
+					print("An error occurred while executing opcode %s at 0x%04x %s" % (instruction["opstr"], self.registers["pc"].value,args) )
+					print(f"An error occurred: {e}")
+					
+					
 				if instruction["type"]  in [TYPE_LOGIC_8]:
 					self.flag_state(FLAGS_CARRY_FLAG, self.registers["a"].carry)
 					self.flag_state(FLAGS_ZERO_FLAG, self.registers["a"].zero)
@@ -372,7 +390,13 @@ class CPU:
 					elif instruction["arg"][0] == "PSW":
 						self.registers["f"].value = result
 
+				
+				for (clocks,cb) in self.timers:
+					if ((self.registers["cycles"].value + cycles) % clocks) < cycles:
+						cb(self.parent)
+
 				self.registers["cycles"].value += cycles
+
 			else:
 				print("UNHANDLED2!", instruction["opstr"])
 
@@ -382,9 +406,10 @@ class CPU:
 			return False
 
 
-	def call_interrupt(self, address):
-		self._push(self, None, self.registers["sp"].value)
-		self.registers["pc"].value = address
+	def call_interrupt(self, number):
+		print("Interrupt %d" % number)
+		self._push( None, self.registers["pc"].value)
+		self._rst(None,number,None)
 
 	def _nop(self, op,  a0=None, a1=None):
 		return (op["c"][0], None)
@@ -408,6 +433,10 @@ class CPU:
 		self.registers["a"].value |= a0
 		return (op["c"][0],self.registers["a"].value)
 
+	def _ori(self, op,  a0=None, a1=None):
+		self.registers["a"].value |= a0
+		return (op["c"][0],self.registers["a"].value)
+		
 	def _ana(self, op,  a0=None, a1=None):
 		self.registers["a"].value &= a0
 		return (op["c"][0], self.registers["a"].value)
@@ -423,6 +452,10 @@ class CPU:
 	def _dad(self, op,  a0=None, a1=None):
 		self.registers["hl"].value += a0
 		return (op["c"][0], a0)
+
+
+	def _dcr(self, op,  a0=None, a1=None):
+		return (op["c"][0], a0 - 1)
 
 
 	def _adc(self, op,  a0=None, a1=None):
@@ -509,10 +542,12 @@ class CPU:
 
 	def _rst(self, op,  a0=None, a1=None):
 		self.registers["pc"].value = a0 * 8
+		if op == None:
+			return None
 		return (op["c"][0], None)
 
 	def _cmp(self, op,  a0=None, a1=None):
-		return (op["c"][0], (a0 - a1))
+		return (op["c"][0], (self.registers["a"].value - a0))
 
 	def _lda(self, op,  a0=None, a1=None):
 		self.registers["a"].value = a0
@@ -542,6 +577,9 @@ class CPU:
 		self.registers["ie"].value = 0
 		return (op["c"][0], None)
 
+	def _inr(self, op,  a0=None, a1=None):
+		return (op["c"][0], a0 + 1)
+
 	def _adi(self, op,  a0=None, a1=None):
 		self.registers["a"].value += a0
 		return (op["c"][0], self.registers["a"].value)
@@ -555,7 +593,8 @@ class CPU:
 		return (op["c"][0], None)
 
 	def _cma(self, op,  a0=None, a1=None): #fixme
-		return (op["c"][0], ~a0)
+		self.registers["a"].value -= ~self.registers["a"].value
+		return (op["c"][0], self.registers["a"].value)
 		
 	def _lhld(self, op,  a0=None, a1=None): #fixme
 		self.registers["hl"].value = self._memory[a0]
@@ -582,27 +621,27 @@ class CPU:
 		
 	def _cnz(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_ZERO_FLAG) == 0:
-			self._push(self, None, self.registers["pc"].value)
+			self._push(None, self.registers["pc"].value,None)
 			self.registers["pc"].value = a0
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 	def _cz(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_ZERO_FLAG) == 1:
-			self._push(self, None, self.registers["pc"].value)
+			self._push(None, self.registers["pc"].value)
 			self.registers["pc"].value = a0
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 
 	def _cpe(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_PARITY_FLAG) == 1:
-			self._push(self, None, self.registers["pc"].value)
+			self._push(None, self.registers["pc"].value,None)
 			self.registers["pc"].value = a0
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 
 	def _cm(self, op,  a0=None, a1=None): #fixme
 		if self.get_flag(FLAGS_SIGN_FLAG) == 1:
-			self._push(self, None, self.registers["pc"].value)
+			self._push(None, self.registers["pc"].value,None)
 			self.registers["pc"].value = a0
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 

@@ -12,6 +12,7 @@ import keybd
 #MIN_HEIGHT = 224
 CLOCK_FREQ = 4000000
 
+
 def handle_interrupt(signal, frame):
 	print("\nKeyboard interrupt received.")
 	global break_interrupt
@@ -21,20 +22,22 @@ def handle_interrupt(signal, frame):
 
 class Emulator:
 	def __init__(self):
-		self._cpu = cpu.CPU()
+		self._cpu = cpu.CPU(self, freq=CLOCK_FREQ)
 		self._video = video.TextVideoDisplay(self._cpu);
 		self._interface = interface.Interface(self._cpu)
-		self._keybd = keybd.Keyboard(self._cpu)
+		self._keybd = keybd.Keyboard(self._cpu,interrupt=0x04)
 #			self._cpu.load_rom(0x0000,path)
 
 
-#		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
-#		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
+		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
+		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
+
+#		self._cpu.load_rom(0x0000,"roms/debug.bin")
 
 
-		self._cpu.load_rom(0x0000,"roms/debug.bin")
 
-
+	def dummytimer(self,emu):
+		print("beep")
 
 	def _handle(self, event):
 		if event.type == pygame.QUIT:

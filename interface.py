@@ -7,7 +7,7 @@ import threading
 import queue
 
 class Interface:
-	def __init__(self,cpu, host="localhost", port=2323,printerfile="printer.out"):
+	def __init__(self,cpu, host="localhost",interrupt=0x05, port=2323,printerfile="printer.out"):
 		self.host = host
 		self.port = port
 		self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -19,18 +19,21 @@ class Interface:
 #		self.start()
 		self._printerfile = printerfile
 		self.printer = printer.Printer(self._cpu); #printer hangs off interface card
-
+		self.interrupt = interrupt
 		
 		self.status_reg = 0
 
-		self._cpu._io.register_ioport(0x40,"w",self.dummyio)
-		self._cpu._io.register_ioport(0x48,"r",self.dummyio)
-		self._cpu._io.register_ioport(0x48,"w",self.dummyio)
-		self._cpu._io.register_ioport(0x50,"w",self.dummyio)
-		self._cpu._io.register_ioport(0x58,"r",self.dummyio)
-		self._cpu._io.register_ioport(0x58,"w",self.dummyio)
-		self._cpu._io.register_ioport(0x60,"r",self.dummyio)
-		self._cpu._io.register_ioport(0x60,"w",self.dummyio)
+
+		self._cpu._io.register_ioport(0x40,"r",self.unkstaussport)
+
+#		self._cpu._io.register_ioport(0x40,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x48,"r",self.dummyio)
+#		self._cpu._io.register_ioport(0x48,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x50,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x58,"r",self.dummyio)
+#		self._cpu._io.register_ioport(0x58,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x60,"r",self.dummyio)
+#		self._cpu._io.register_ioport(0x60,"w",self.dummyio)
 
 
 		self._cpu._io.register_ioport(0x68,"r",self.read_data)
@@ -42,10 +45,24 @@ class Interface:
 		self._cpu._io.register_ioport(0x78,"r",self.get_status)
 		self._cpu._io.register_ioport(0x78,"w",self.set_status)
 
-		f = open("dummy.txt")
+
+
+		self._cpu.add_timer(self._cpu.freq/256, self.check_for_input) #interval is arbitrary for debugging
+		self.debug_preload_queue()
+
+	def unkstaussport(self,port,mode,data):
+		if mode == "r":
+			return 0x01
+
+	def debug_preload_queue(self):
+		f = open("dummy.txt","rb")
 		d = f.read(9999)
 		for i in d:
 			self.read_queue.put(i)
+			
+	def check_for_input(self,emu):
+		if not self.read_queue.empty():
+			emu._cpu.call_interrupt(self.interrupt)
 
 	def set_status(self,port,mode,data):
 		self.status_reg  = data

@@ -1,13 +1,13 @@
 import random
 
 class Keyboard:
-	def __init__(self, cpu):
+	def __init__(self, cpu, interrupt):
 		self.kybd_latched = False
 		self.kybd_latched_key = 0
 		self.led_state = False
 		self.modifier_state = 0
 		self.key_matrix_state = 0
-
+		self.interrupt_no = interrupt & 0x0f
 		self.kybd_latch_value = 0
 		self._cpu = cpu
 		
@@ -28,11 +28,13 @@ class Keyboard:
 		self.kybd_latched = False
 		ascii = self.kybd_latched_key
 		self.kybd_latched_key = 0
+		
 		return ascii
 
 	def key_down_ascii(self,ascii):
 		self.kybd_latched = True
 		self.kybd_latched_key = ascii
+		self._cpu.call_interrupt(self.interrupt_no)
 		
 	def key_up_ascii(self,ascii):
 		pass

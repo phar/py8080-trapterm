@@ -72,7 +72,7 @@ class Debugger(cmd.Cmd):
 #			print(type(r[n]))
 			
 			if isinstance(r[n], cpu.FLAGS_REGISTER):
-				print("\nFlags:", v.value )
+				print("\nFlags: 0x%02x" % v.value )
 				for nn,vv in self._flagsinfo.items():
 					print("  %s: 0x%x" % (nn, (v.value & vv) > 0)  )
 				
