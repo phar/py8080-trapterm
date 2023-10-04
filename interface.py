@@ -1,7 +1,7 @@
 import cpu
 import struct
 import printer
-
+import random
 import socket
 import threading
 import queue
@@ -21,13 +21,12 @@ class Interface:
 		self.printer = printer.Printer(self._cpu); #printer hangs off interface card
 		self.interrupt = interrupt
 		
-		self.status_reg = 0
-
+		self.status_reg = 0x40
+		self.txbuff = [0,0]
 
 		self._cpu._io.register_ioport(0x40,"r",self.unkstaussport)
 
 #		self._cpu._io.register_ioport(0x40,"w",self.dummyio)
-#		self._cpu._io.register_ioport(0x48,"r",self.dummyio)
 #		self._cpu._io.register_ioport(0x48,"w",self.dummyio)
 #		self._cpu._io.register_ioport(0x50,"w",self.dummyio)
 #		self._cpu._io.register_ioport(0x58,"r",self.dummyio)
@@ -39,20 +38,35 @@ class Interface:
 		self._cpu._io.register_ioport(0x68,"r",self.read_data)
 
 
-		self._cpu._io.register_ioport(0x68,"w",self.write_data)
+		self._cpu._io.register_ioport(0x68,"w",self.tx_highreg)
+		self._cpu._io.register_ioport(0x78,"w",self.tx_lowreg)
+
 		self._cpu._io.register_ioport(0x70,"w",self.write_data)
 		
 		self._cpu._io.register_ioport(0x78,"r",self.get_status)
-		self._cpu._io.register_ioport(0x78,"w",self.set_status)
 
 
 
-		self._cpu.add_timer(self._cpu.freq/256, self.check_for_input) #interval is arbitrary for debugging
+#		self._cpu.add_timer(self._cpu.freq/256, self.check_for_input) #interval is arbitrary for debugging
 		self.debug_preload_queue()
+
+
+#	def read_keyboardstate_latchself,port,mode,data):
+#		#0x40 KEY LATCHED
+#		#lower 3 bits are status
+#		#fixme
+#		return
+
+	def tx_highreg(self,port,mode,data):
+		print("tx_high %02x" % data)
+
+	def tx_lowreg(self,port,mode,data):
+		print("tx_low %02x" % data)
+
 
 	def unkstaussport(self,port,mode,data):
 		if mode == "r":
-			return 0x01
+			return 0xff
 
 	def debug_preload_queue(self):
 		f = open("dummy.txt","rb")
@@ -69,7 +83,7 @@ class Interface:
 		return data
 
 	def get_status(self,port,mode,data):
-		return self.status_reg
+		return 0x40 | random.randint(0,0x3f) #elf.status_reg
 
 
 	def write_data(self,port,mode,data):

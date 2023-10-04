@@ -2,7 +2,7 @@ import cmd
 import hexdump
 import cpu
 import opcodes
-
+import time
 break_interrupt = False
 		
 
@@ -15,7 +15,7 @@ class Debugger(cmd.Cmd):
 		"Z":opcodes.FLAGS_ZERO_FLAG,
 		"AC":opcodes.FLAGS_AUXCARRY_FLAG,
 		"P":opcodes.FLAGS_PARITY_FLAG,
-		"C":opcodes.FLAGS_CARRY_FLAG}
+		"CY":opcodes.FLAGS_CARRY_FLAG}
 
 
 	def __init__(self,emu):
@@ -23,15 +23,27 @@ class Debugger(cmd.Cmd):
 		self.emu=emu
 		# Set up the signal handler for Ctrl+C
 
+	def do_hexload(self,arg):
+		try:
+			t = arg.split(" ")
+			offset = parse_inputint(t[0])
+			bytes = bytearray.fromhex(" ".join(t[1:]).replace(" ", ""))
+			for l in range(len(bytes)):
+				self.emu._cpu.memory.memory[offset+l] = bytes[l]
+		except ValueError:
+			print("bad input")
+			return False
+
+
 	def do_run(self,arg):
 #		signal.signal(signal.SIGINT, handle_interrupt)
 #		global break_interrupt
 #		break_interrupt = False
 #		while break_interrupt == False:
 		self.emu.run()
-		print("--------------------------------------\nbreak @0x%04x" % self.emu._cpu.get_regs()["pc"].value)
-#		signal.signal(signal.SIGINT, signal.SIG_DFL)
-		
+		self.do_registers(arg)
+		ins,a,s = self.emu._cpu.disassemble_current_instruction(self.emu._cpu.registers["pc"].value)
+		print(s)
 		
 	def do_disassemble(self,args):
 		try:
@@ -53,10 +65,13 @@ class Debugger(cmd.Cmd):
 			step = parse_inputint(arg)
 		else:
 			step = 1
-		
+			
+		t1 = time.time()
 		i,s = self.emu.step(step)
+		t2 = time.time() - t1
 		self.do_registers(arg)
-		print(s[2])
+		ins,a,s = self.emu._cpu.disassemble_current_instruction(self.emu._cpu.registers["pc"].value)
+		print(s," %s Seconds" % t2)
 		
 	def do_break(self, arg):
 		if arg:
@@ -69,21 +84,53 @@ class Debugger(cmd.Cmd):
 		r = self.emu._cpu.get_regs()
 		i = 0
 		for n,v in r.items():
-#			print(type(r[n]))
-			
-			if isinstance(r[n], cpu.FLAGS_REGISTER):
-				print("\nFlags: 0x%02x" % v.value )
-				for nn,vv in self._flagsinfo.items():
-					print("  %s: 0x%x" % (nn, (v.value & vv) > 0)  )
-				
-			elif isinstance(r[n], cpu.REGISTER_CELL):
-				print(n,"\t0x%x" % v.value, end="\t")
-
-			if (i % 4) == 0:
+			fmt = "\t0x%0"+str(int(v.bitwidth/4))+"x"
+			print(n,fmt % v.value, end="\t")
+			if (i>0) and (i % 4) == 0:
 				print("")
 			i+=1
+			
+		print("\nFlags: 0x%02x" % r["f"].value )
+		for nn,vv in self._flagsinfo.items():
+			print("  %s: 0x%x" % (nn, (r["f"].value & vv) > 0) ,end='' )
+
 		print("\n")
 		
+	def do_set(self, args):
+		try:
+			(valname,value) = args.split(" ")
+			valueint = parse_inputint(value)
+
+			if valname in ["a","bc","de","hl","sp","pc"]:
+				self.emu._cpu.registers[valname].value = valueint & 0xffff
+				
+			elif valname in ["c","e",""]:
+				valref = {"c":"bc","e":"de","l":"hl"}
+				self.emu._cpu.registers[valname].value &= 0xff00
+				self.emu._cpu.registers[valname.lower].value |= (valueint & 0xff)
+
+			elif  valname in ["b","d","h"]:
+				valref = {"b":"bc","d":"de","h":"hl"}
+				self.emu._cpu.registers[valname.lower()].value &= 0x00ff
+				self.emu._cpu.registers[valname.lower()].value |=  (valueint & 0xff) << 8
+				
+			elif valname in ["f"]:
+				self.emu._cpu.registers[valname.lower()].value = (valueint & 0xff)
+
+			elif valname in ["S","Z","AC","CY","P"]:
+				if valueint == 0:
+					self.emu._cpu.registers[valname.lower()].value &= ~self._flagsinfo[valname.upper()]
+				else:
+					self.emu._cpu.registers[valname.lower()].value |= self._flagsinfo[valname.upper()]
+
+
+			elif parse_inputint(valname) > 0:
+				self.emu._cpu._memory.memory[parse_inputint(valname)] = valueint & 0xff
+
+		except ValueError:
+			print("not enough arguments provided")
+			return False
+	
 	def do_reset(self,args):
 		self.emu._cpu.reset()
 		

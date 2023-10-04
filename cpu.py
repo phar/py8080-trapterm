@@ -26,24 +26,25 @@ class RAM(list):
 			self.access_callbacks[pageno + p] = callback
 
 	def __getitem__(self, address):
-		if isinstance(address, int):
-			address &= 0xffff
-			page = int(address / self.pagesize)
-			if self.access_callbacks[page] is not None:
-				return self.access_callbacks[page](address, self.memory[address], "r")
-			return  self.memory[address]
-		else:
-			raise TypeError("Address must be an integer")
+#		if isinstance(address, int):
+		address &= 0xffff
+		page = int(address / self.pagesize)
+		if self.access_callbacks[page] is not None:
+			return self.access_callbacks[page](address, self.memory[address], "r")
+		return  self.memory[address]
+#		else:
+#			raise TypeError("Address must be an integer")
 
 	def __setitem__(self, address, value):
 		address &= 0xffff
-		if isinstance(address, int) and isinstance(value, int):
-			page = int(address / self.pagesize)
-			if self.access_callbacks[page] is not None:
-				self.memory[address] = self.access_callbacks[page](address, value, "w")
-			self.memory[address] = value & 0xff
+#		if isinstance(address, int) and isinstance(value, int):
+		page = int(address / self.pagesize)
+		if self.access_callbacks[page] is not None:
+			self.memory[address] = self.access_callbacks[page](address, value, "w")
 		else:
-			raise TypeError("Address and data must be integers")
+			self.memory[address] = value & 0xff
+#		else:
+#			raise TypeError("Address and data must be integers")
 	  
 
 
@@ -64,42 +65,7 @@ class REGISTER_CELL:
 		else:
 			raise TypeError("Value must be an integer")
 
-
-class ACCUMULATOR_REGISTER(REGISTER_CELL):
-	def __init__(self,name="", width=16):
-		self.name = name
-		self.val = 0
-		self.bitwidth = width
-		self.carry = 0
-		self.aux_carry = 0
-		self.zero = 0
-		self.parity = 0;
-		self.sign = 0
-		
-	@property
-	def value(self):
-		return self.val
-
-	@value.setter
-	def value(self, val):
-		if isinstance(val, int):
-			# Calculate the carry and aux_carry flags
-			carry_mask =  ((2 ** self.bitwidth) - 1) + 1
-			aux_carry_mask = 1 << (self.bitwidth // 2)
-			
-			self.carry = (val & carry_mask) > 0
-			self.aux_carry = (val & aux_carry_mask) > 0
-			self.parity = bin(val).count('1') % 2
-			self.sign = (val & 0x80) > 0
-			# Mask the value to fit within the specified bit width
-			self.val = val & ((2 ** self.bitwidth) - 1)
-			if self.val == 0:
-				self.zero = 1
-			else:
-				self.zero = 0
-		else:
-			raise TypeError("Value must be an integer")
-			
+	
 
 class FLAGS_REGISTER(REGISTER_CELL):
 	def __init__(self,name="F",width=16):
@@ -132,7 +98,7 @@ class CPU:
 		self.registers = {
 			"pc":REGISTER_CELL("pc",width=16),
 			"sp":REGISTER_CELL("sp",width=16),
-			"a":ACCUMULATOR_REGISTER("a",width=8),
+			"a":REGISTER_CELL("a",width=8),
 			"f":FLAGS_REGISTER(width=8),
 			"bc":REGISTER_CELL("bc",width=16),
 			"de":REGISTER_CELL("de",width=16),
@@ -194,20 +160,6 @@ class CPU:
 				return True
 		return False
 
-
-#	def run_cycles(self, cycles):
-#		"""
-#		Used for debugging
-#
-#		:param cycles: int
-#		:return: program counter
-#		"""
-##		global break_interrupt
-##		for i in range(cycles):
-##			isbp = self.step()
-##			if break_interrupt == True or self.registers["pc"].value in self.breakpoints:
-##				return True
-#		return False
 
 	def disassemble_current_instruction(self,offset):
 
@@ -320,64 +272,66 @@ class CPU:
 		:return:
 		"""
 
-		try:
-
-			instruction,args = self.decompose(self.registers["pc"].value)
+		instruction,args = self.decompose(self.registers["pc"].value)
 		
-		
-		except Exception as e:
-			print("An error occurred while executing opcode %s at 0x%04x" % (instruction["opstr"], self.registers["pc"].value),args)
-			print(f"An error occurred: {e}")
-
 		if instruction is not None:
 			self.registers["pc"].value += instruction["l"]
 			cycles = 0
 
-			if hasattr(self, "_" + instruction["opstr"].lower()) and callable(getattr(self, "_" + instruction["opstr"].lower())):
-				method = getattr(self, "_" + instruction["opstr"].lower())
+			if "m" in instruction: #bit of a speed hack to cache this lookup
+				method = instruction["m"]
+			else:
+				if hasattr(self, "_" + instruction["opstr"].lower()) and callable(getattr(self, "_" + instruction["opstr"].lower())):
+					method = getattr(self, "_" + instruction["opstr"].lower())
+					Opcodes8080[instruction["op"]]["m"] = method
+				else:
+					method = None
+					
+					
+			if method != None:
 				try:
 					(cycles, result) = method(instruction, args[0],args[1])
 				except Exception as e:
 					print("An error occurred while executing opcode %s at 0x%04x %s" % (instruction["opstr"], self.registers["pc"].value,args) )
 					print(f"An error occurred: {e}")
-					
-					
-				if instruction["type"]  in [TYPE_LOGIC_8]:
-					self.flag_state(FLAGS_CARRY_FLAG, self.registers["a"].carry)
-					self.flag_state(FLAGS_ZERO_FLAG, self.registers["a"].zero)
-					self.flag_state(FLAGS_AUXCARRY_FLAG, self.registers["a"].aux_carry)
-					self.flag_state(FLAGS_PARITY_FLAG, self.registers["a"].parity)
-					self.flag_state(FLAGS_SIGN_FLAG, self.registers["a"].sign)
 
-				
 				if len(instruction["arg"]) and instruction["type"] not in [TYPE_LOGIC_16,TYPE_MOVE_16]:
-#				try:
-						if instruction["arg"][0] == "A":
-							self.registers["a"].value = result
-						elif instruction["arg"][0] == "SP":
-							self.registers["sp"].value  = result
-						elif instruction["arg"][0] == "B":
-							self.registers["bc"].value  &= 0x00ff
-							self.registers["bc"].value  |= result << 8
-						elif instruction["arg"][0] == "C":
-							self.registers["bc"].value  &= 0xff00
-							self.registers["bc"].value  |= result
-						elif instruction["arg"][0] == "H":
-							self.registers["hl"].value  &= 0x00ff
-							self.registers["hl"].value  |= result << 8
-						elif instruction["arg"][0] == "L":
-							self.registers["hl"].value  &= 0xff00
-							self.registers["hl"].value  |= result
-						elif instruction["arg"][0] == "D":
-							self.registers["de"].value  &= 0x00ff
-							self.registers["de"].value  |= result << 8
-						elif instruction["arg"][0] == "E":
-							self.registers["de"].value  &= 0xff00
-							self.registers["de"].value  |= result
-						elif instruction["arg"][0] == "M":
-							self._memory[self.registers["hl"].value] = result & 0xff
-	#				except:
-	#					print("ERROR!",instruction)
+					if instruction["type"]  == TYPE_LOGIC_8:
+						carry_mask =  0x100
+						aux_carry_mask = 0x10
+
+						self.flag_state(FLAGS_CARRY_FLAG, (result & carry_mask) > 0)
+						self.flag_state(FLAGS_SIGN_FLAG, result < 0)
+						result &= 0xff
+						self.flag_state(FLAGS_ZERO_FLAG, result == 0)
+						self.flag_state(FLAGS_AUXCARRY_FLAG, (result & aux_carry_mask) > 0)
+						self.flag_state(FLAGS_PARITY_FLAG,  bin(result).count('1') % 2)
+
+					if instruction["arg"][0] == "A":
+						self.registers["a"].value = result
+					elif instruction["arg"][0] == "SP":
+						self.registers["sp"].value  = result
+					elif instruction["arg"][0] == "B":
+						self.registers["bc"].value  &= 0x00ff
+						self.registers["bc"].value  |= result << 8
+					elif instruction["arg"][0] == "C":
+						self.registers["bc"].value  &= 0xff00
+						self.registers["bc"].value  |= result
+					elif instruction["arg"][0] == "H":
+						self.registers["hl"].value  &= 0x00ff
+						self.registers["hl"].value  |= result << 8
+					elif instruction["arg"][0] == "L":
+						self.registers["hl"].value  &= 0xff00
+						self.registers["hl"].value  |= result
+					elif instruction["arg"][0] == "D":
+						self.registers["de"].value  &= 0x00ff
+						self.registers["de"].value  |= result << 8
+					elif instruction["arg"][0] == "E":
+						self.registers["de"].value  &= 0xff00
+						self.registers["de"].value  |= result
+					elif instruction["arg"][0] == "M":
+						self._memory[self.registers["hl"].value] = result
+
 				elif len(instruction["arg"]) and instruction["type"] in [TYPE_LOGIC_16,TYPE_MOVE_16]:
 					if instruction["arg"][0] == "SP":
 						self.registers["sp"].value  = result
@@ -398,7 +352,10 @@ class CPU:
 				self.registers["cycles"].value += cycles
 
 			else:
-				print("UNHANDLED2!", instruction["opstr"])
+				if instruction["opstr"] == "HLT":				#treat the halt instruction like a breakpoint
+					return True
+				else:
+					print("UNHANDLED2!", instruction["opstr"])
 
 		if self.registers["pc"].value in self.breakpoints:
 			return True
@@ -407,9 +364,13 @@ class CPU:
 
 
 	def call_interrupt(self, number):
-		print("Interrupt %d" % number)
-		self._push( None, self.registers["pc"].value)
-		self._rst(None,number,None)
+		if self.registers["ie"].value:
+			print("Interrupt %d" % number)
+			self._push( None, self.registers["pc"].value)
+			self._rst(None,number,None)
+		else:
+			print("Interrupt %d with interrupts disabled" % number)
+
 
 	def _nop(self, op,  a0=None, a1=None):
 		return (op["c"][0], None)
@@ -422,53 +383,62 @@ class CPU:
 		return (op["c"][0], a1)
 	
 	def _cpi(self, op,  a0=None, a1=None):
-		self.registers["a"].value -= a0
-		return (op["c"][0], self.registers["a"].value)
+		t = self.registers["a"].value - a0
+#		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _ani(self, op,  a0=None, a1=None):
-		self.registers["a"].value &= a0
-		return (op["c"][0], self.registers["a"].value)
+		t = self.registers["a"].value & a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _ora(self, op,  a0=None, a1=None):
-		self.registers["a"].value |= a0
-		return (op["c"][0],self.registers["a"].value)
+		t = self.registers["a"].value | a0
+		self.registers["a"].value = t
+		return (op["c"][0],t)
 
 	def _ori(self, op,  a0=None, a1=None):
-		self.registers["a"].value |= a0
-		return (op["c"][0],self.registers["a"].value)
+		t = self.registers["a"].value | a0
+		self.registers["a"].value = t
+		return (op["c"][0],t)
 		
 	def _ana(self, op,  a0=None, a1=None):
-		self.registers["a"].value &= a0
-		return (op["c"][0], self.registers["a"].value)
+		t = self.registers["a"].value & a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _sub(self, op,  a0=None, a1=None):
-		self.registers["a"].value -= a0
-		return (op["c"][0], self.registers["a"].value )
+		t = self.registers["a"].value - a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _add(self, op,  a0=None, a1=None):
-		self.registers["a"].value += a0
-		return (op["c"][0], self.registers["a"].value)
+		t = self.registers["a"].value + a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _dad(self, op,  a0=None, a1=None):
-		self.registers["hl"].value += a0
-		return (op["c"][0], a0)
-
+		t = self.registers["hl"].value + a0
+		self.registers["hl"].value = t
+		return (op["c"][0], t)
 
 	def _dcr(self, op,  a0=None, a1=None):
 		return (op["c"][0], a0 - 1)
 
-
 	def _adc(self, op,  a0=None, a1=None):
-		self.registers["a"].value += (a0 + sself.get_flag(FLAGS_CARRY_FLAG))
-		return (op["c"][0], self.registers["a"].value)
+		t  = (a0 + sself.get_flag(FLAGS_CARRY_FLAG))
+		self.registers["a"].value = t
+		return (op["c"][0],t)
 
 	def _xri(self, op,  a0=None, a1=None):
-		self.registers["a"].value ^= a0
-		return (op["c"][0], self.registers["a"].value)
+		t = self.registers["a"].value ^ a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _xra(self, op,  a0=None, a1=None):
-		self.registers["a"].value ^= a0
-		return (op["c"][0], self.registers["a"].value)
+		t = self.registers["a"].value ^ a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _sta(self, op,  a0=None, a1=None):
 		self._memory[a0] = self.registers["a"].value
@@ -491,67 +461,23 @@ class CPU:
 		self.registers["a"].value = (self.registers["a"].value >> 1) | (self.get_flag(FLAGS_CARRY_FLAG) << 7)
 		self.flag_state(FLAGS_CARRY_FLAG,c)
 		return (op["c"][0], None)
-		
 
-	def _rrc(self, op,  a0=None, a1=None):
-		if self.registers["a"].value & 0x01:
-			c = 1
-		else:
-			c = 0
-		self.registers["a"].value = (self.registers["a"].value >> 1) | (c << 7)
-		self.flag_state(FLAGS_CARRY_FLAG,c)
-		return (op["c"][0], None)
+	def _adi(self, op,  a0=None, a1=None):
+		t = self.registers["a"].value + a0
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
-	def _rlc(self, op,  a0=None, a1=None):
-		if self.registers["a"].value & 0x80:
-			c = 1
-		else:
-			c = 0
-		self.registers["a"].value = (self.registers["a"].value << 1) | c
-		self.flag_state(FLAGS_CARRY_FLAG,c)
-		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
-
-	def _jc(self, op,  a0=None, a1=None):
-		if self.get_flag(FLAGS_CARRY_FLAG):
-			self.registers["pc"].value = a0
-		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], a1)
-
-	def _jmp(self, op,  a0=None, a1=None):
-		self.registers["pc"].value = a0
-		return (op["c"][0], a1)
-
-	def _jz(self, op,  a0=None, a1=None):
-		if self.get_flag(FLAGS_ZERO_FLAG):
-			self.registers["pc"].value = a0
-		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], a1)
-
-	def _jnz(self, op,  a0=None, a1=None):
-		if self.get_flag(FLAGS_ZERO_FLAG) == 0:
-			self.registers["pc"].value = a0
-		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], a1)
-		
-	def _jnc(self, op,  a0=None, a1=None):
-		if self.get_flag(FLAGS_CARRY_FLAG) == 0:
-			self.registers["pc"].value = a0
-		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], a1)
-		
-	def _jc(self, op,  a0=None, a1=None):
-		if self.get_flag(FLAGS_CARRY_FLAG):
-			self.registers["pc"].value = a0
-		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], a1)
-
-	def _rst(self, op,  a0=None, a1=None):
-		self.registers["pc"].value = a0 * 8
-		if op == None:
-			return None
-		return (op["c"][0], None)
+	def _sui(self, op,  a0=None, a1=None):
+		t = self.registers["a"].value - a0
+		self.registers["a"].value = t
+		return (op["c"][0],t)
 
 	def _cmp(self, op,  a0=None, a1=None):
 		return (op["c"][0], (self.registers["a"].value - a0))
 
 	def _lda(self, op,  a0=None, a1=None):
-		self.registers["a"].value = a0
-		return (op["c"][0], a1)
+		self.registers["a"].value = self.fetch_rom_byte(a0)
+		return (op["c"][0],self.registers["a"].value)
 
 	def _ldax(self, op,  a0=None, a1=None):
 		if op["arg"][0] == "B":
@@ -560,6 +486,62 @@ class CPU:
 			self.registers["a"].value = self.fetch_rom_short(self.registers["de"].value)
 		return (op["c"][0], a0)
 
+	def _stax(self, op,  a0=None, a1=None):
+		if op["arg"][0] == "B":
+			self.set_rom_short(self.registers["bc"].value, self.registers["a"].value )
+			return (op["c"][0], self.registers["bc"].value)
+		elif op["arg"][0] == "D":
+			self.set_rom_short(self.registers["de"].value, self.registers["a"].value )
+			return (op["c"][0], self.registers["de"].value)
+
+	def _rrc(self, op,  a0=None, a1=None):
+		if self.registers["a"].value & 0x01:
+			c = 1
+		else:
+			c = 0
+		self.registers["a"].value = (self.registers["a"].value >> 1) | (c << 8)
+		return (op["c"][0], None)
+
+	def _rlc(self, op,  a0=None, a1=None):
+		t = (self.registers["a"].value << 1) | self.get_flag(FLAGS_CARRY_FLAG)
+		self.registers["a"].value  = t
+		return (op["c"][0], t)
+
+	def _jc(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_CARRY_FLAG):
+			self.registers["pc"].value = a0
+		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
+
+	def _jmp(self, op,  a0=None, a1=None):
+		self.registers["pc"].value = a0
+		return (op["c"][0], None)
+
+	def _jz(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_ZERO_FLAG):
+			self.registers["pc"].value = a0
+		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
+
+	def _jnz(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_ZERO_FLAG) == 0:
+			self.registers["pc"].value = a0
+		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
+		
+	def _jnc(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_CARRY_FLAG) == 0:
+			self.registers["pc"].value = a0
+		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
+		
+	def _jc(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_CARRY_FLAG):
+			self.registers["pc"].value = a0
+		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], none)
+
+	def _rst(self, op,  a0=None, a1=None):
+		self.registers["pc"].value = a0 * 8
+		if op == None:
+			return None
+		return (op["c"][0], None)
+
 	def _mvi(self, op,  a0=None, a1=None):
 		return (op["c"][0], a1)
 
@@ -567,7 +549,7 @@ class CPU:
 		return (op["c"][0], a0+1)
 
 	def _dcx(self, op,  a0=None, a1=None):
-		return (op["c"][0], a0+1)
+		return (op["c"][0], a0-1)
 
 	def _ei(self, op,  a0=None, a1=None):
 		self.registers["ie"].value = 1
@@ -580,24 +562,18 @@ class CPU:
 	def _inr(self, op,  a0=None, a1=None):
 		return (op["c"][0], a0 + 1)
 
-	def _adi(self, op,  a0=None, a1=None):
-		self.registers["a"].value += a0
-		return (op["c"][0], self.registers["a"].value)
-
-	def _sui(self, op,  a0=None, a1=None):
-		self.registers["a"].value -= a0
-		return (op["c"][0], self.registers["a"].value)
 
 	def _shld(self, op,  a0=None, a1=None): #fixme
 		self._memory[a0] = self.registers["hl"].value
 		return (op["c"][0], None)
 
 	def _cma(self, op,  a0=None, a1=None): #fixme
-		self.registers["a"].value -= ~self.registers["a"].value
-		return (op["c"][0], self.registers["a"].value)
+		t =  ~self.registers["a"].value
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 		
 	def _lhld(self, op,  a0=None, a1=None): #fixme
-		self.registers["hl"].value = self._memory[a0]
+		self.registers["hl"].value = self.fetch_rom_short(a0)
 		return (op["c"][0], None)
 
 	def _xchg(self, op,  a0=None, a1=None):
@@ -605,11 +581,17 @@ class CPU:
 		self.registers["hl"].value = self.registers["de"].value
 		self.registers["de"].value = t
 		return (op["c"][0], None)
-		
+	
+	def _pop(self, op,  a0=None, a1=None):
+		r = self.fetch_rom_short(self.registers["sp"].value)
+		self.registers["sp"].value += 2
+		if op == None:
+			return r
+		return (op["c"][0], r)
+
 	def _push(self, op,  a0=None, a1=None):
-		self._memory[self.registers["sp"].value - 1] = (a0 & 0xff00) >> 8
-		self._memory[self.registers["sp"].value - 2] = (a0 & 0x00ff)
 		self.registers["sp"].value -= 2
+		self.set_rom_short(self.registers["sp"].value,a0)
 		if op == None:
 			return
 		return (op["c"][0], a0)
@@ -669,20 +651,18 @@ class CPU:
 			self.registers["pc"].value = self._pop(None,None,None)
 		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
 
-	def _pop(self, op,  a0=None, a1=None):
-		r = self.fetch_rom_short(self.registers["sp"].value)
-		self.registers["sp"].value += 2
-		if op == None:
-			return r
-		return (op["c"][0], r)
 
-	def _out(self, op,  a0=None, a1=None):  #fixme
+	def _out(self, op,  a0=None, a1=None):
+		print("out %02x %02x" % (a0,self.registers["a"].value))
 		self._io.output(a0, self.registers["a"].value)
 		return (op["c"][0],  self.registers["a"].value)
 		
-	def _in(self, op,  a0=None, a1=None):  #fixme
+	def _in(self, op,  a0=None, a1=None):
+		print("in %02x" % (a0))
 		self.registers["a"].value = self._io.input(a0)
 		return (op["c"][0], None)
+
+
 
 ########################################################
 
@@ -712,37 +692,14 @@ class CPU:
 
 		return byte_
 
-	def read_2bytes(self, address):
-		return (self._memory[address + 1] << 8) + self._memory[address]
-
-	def write_byte(self, address, data):
-		self._memory[address] = data & 0xFF
-
-	def write_2bytes(self, address, data):
-		self._memory[address + 1] = data >> 8
-		self._memory[address] = data & 0xFF
-
-
 	def fetch_rom_byte(self,address):
-		# Read next 8 bits
 		data = self._memory[address]
 		return data
 
 	def fetch_rom_short(self,address):
-		# Read next 16 bits (notice endian)
 		data = (self._memory[address + 1] << 8) + self._memory[address]
 		return data
 
-
-
-	def fetch_rom_next_byte(self,address=None):
-		# Read next 8 bits
-		data = self.fetch_rom_byte(self.registers["pc"].value)
-		return data
-
-	def fetch_rom_next_2bytes(self):
-		# Read next 16 bits (notice endian)
-#		data = (self._memory[self.registers["pc"].value + 1] << 8) + self._memory[self.registers["pc"].value]
-		data = self.fetch_rom_short(self.registers["pc"].value)
-		return data
-
+	def set_rom_short(self, address, data):
+		self._memory[address + 1] = data >> 8
+		self._memory[address] = data & 0xFF

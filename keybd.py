@@ -22,13 +22,15 @@ class Keyboard:
 
 
 	def read_modifiers(self,port,mode,data):
-		return self.modifier_state
+	#		#0x40 KEY LATCHED
+#		#lower 3 bits are status
+#		#fixme
+		return (self.kybd_latched_key << 7) | self.modifier_state
 
 	def read_keyboard(self,port,mode,data):
 		self.kybd_latched = False
 		ascii = self.kybd_latched_key
 		self.kybd_latched_key = 0
-		
 		return ascii
 
 	def key_down_ascii(self,ascii):

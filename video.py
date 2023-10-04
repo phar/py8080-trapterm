@@ -47,6 +47,10 @@ class TextVideoDisplay:
 
 		self._cpu._memory.set_access_callback(self._base_page,self._page_count, self.display_access) #0xc000
 
+		#this is a terrible idea
+#		self._cpu.add_timer(self._cpu.freq/256, self.check_for_input) #interval is arbitrary for debugging
+
+
 	def open_rom(self,path):
 		ret = []
 		with open(path, 'rb') as f:
@@ -64,7 +68,29 @@ class TextVideoDisplay:
 	def display_access(self, address, value, action):
 		if action == "w":
 			self._refresh()
-		return self._cpu._memory.memory[address]
+			return value
+		else:
+			return self._cpu._memory.memory[address] 
+		
+	def yieldy_refresh(self):
+	
+		for j in range(0, CHAR_RESOLUTION[1]):
+			for i in range(0, CHAR_RESOLUTION[0]):
+				memaddr = 0xc000 + (j * CHAR_RESOLUTION[0]) + i
+				
+				for e in range(FONT_RESOLUTION[0]):
+					for o in range(8):
+						if self._char_rom[0][(self._cpu._memory.memory[memaddr] * 8)+o] & 0x01 << e:
+							px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o] = WHITE
+						else:
+							px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o] = BLACK
+
+						if o < 3:
+							if self._char_rom[1][(self._cpu._memory.memory[memaddr] * 8)+o] & 0x01 << e:
+								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = WHITE
+							else:
+								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = BLACK
+			yield
 
 	def _refresh(self):
 		"""

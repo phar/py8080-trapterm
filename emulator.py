@@ -29,12 +29,10 @@ class Emulator:
 #			self._cpu.load_rom(0x0000,path)
 
 
-		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
-		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
+#		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
+#		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
 
-#		self._cpu.load_rom(0x0000,"roms/debug.bin")
-
-
+		self._cpu.load_rom(0x0000,"roms/debug.bin")
 
 	def dummytimer(self,emu):
 		print("beep")
