@@ -3,6 +3,8 @@ import hexdump
 import cpu
 import opcodes
 import time
+import threading
+import pygame
 break_interrupt = False
 		
 
@@ -18,10 +20,19 @@ class Debugger(cmd.Cmd):
 		"CY":opcodes.FLAGS_CARRY_FLAG}
 
 
+	def handle_inputs_while_debuggins(self):
+		if self.emu.running == False:
+			for event in pygame.event.get():
+				pygame.event.get()
+			self.emu._video.fps_clock.tick(self.emu._video._fps)
+			pygame.display.update()
+			pygame.display.flip()
+			
 	def __init__(self,emu):
 		super().__init__()
 		self.emu=emu
-		# Set up the signal handler for Ctrl+C
+		timer = threading.Timer(.2, self.handle_inputs_while_debuggins)
+		timer.start()		# Set up the signal handler for Ctrl+C
 
 	def do_hexload(self,arg):
 		try:
@@ -42,6 +53,7 @@ class Debugger(cmd.Cmd):
 #		while break_interrupt == False:
 		self.emu.run()
 		self.do_registers(arg)
+		
 		ins,a,s = self.emu._cpu.disassemble_current_instruction(self.emu._cpu.registers["pc"].value)
 		print(s)
 		
@@ -60,6 +72,26 @@ class Debugger(cmd.Cmd):
 			print(s)
 			o += ins["l"]
 
+
+	def do_savestate(self,args):
+		self.emu._cpu.save_state(args)
+
+
+	def do_loadstate(self,args):
+		self.emu._cpu.load_state(args)
+
+
+	def do_int(self, arg):
+		try:
+			if arg:
+				step = parse_inputint(arg)
+			else:
+				return
+				
+			self.emu._cpu.call_interrupt(step)
+		except:
+			print("failed")
+			
 	def do_step(self, arg):
 		if arg:
 			step = parse_inputint(arg)
@@ -125,7 +157,7 @@ class Debugger(cmd.Cmd):
 
 
 			elif parse_inputint(valname) > 0:
-				self.emu._cpu._memory.memory[parse_inputint(valname)] = valueint & 0xff
+				self.emu._cpu._memory[parse_inputint(valname)] = valueint & 0xff
 
 		except ValueError:
 			print("not enough arguments provided")

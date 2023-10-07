@@ -7,7 +7,7 @@ import video
 import io8080
 import interface
 import keybd
-
+import json
 #MIN_WIDTH = 256
 #MIN_HEIGHT = 224
 CLOCK_FREQ = 4000000
@@ -28,11 +28,17 @@ class Emulator:
 		self._keybd = keybd.Keyboard(self._cpu,interrupt=0x04)
 #			self._cpu.load_rom(0x0000,path)
 
+		self.running = False
+		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
+		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
+		self._cpu._memory.set_access_callback(0,4, self.read_only_memory) #0x0000
 
-#		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
-#		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
 
-		self._cpu.load_rom(0x0000,"roms/debug.bin")
+#		self._cpu.load_rom(0x0000,"roms/debug.bin")
+
+	def read_only_memory(self, address, value, action):
+#		if action == "w":
+		return self._cpu._memory.memory[address]
 
 	def dummytimer(self,emu):
 		print("beep")
@@ -42,13 +48,13 @@ class Emulator:
 			exit()
 
 		if event.type == pygame.KEYDOWN:
-			if event.key == pygame.K_c and pygame.key.get_mods() & KMOD_CTRL:
+			if event.key == pygame.K_c and pygame.key.get_mods() &  pygame.KMOD_CTRL:
 				self._keybd.set_moifier(True)
 			else:
 				self._keybd.key_down_ascii(event.key)
 
 		if event.type == pygame.KEYUP:
-			if event.key == pygame.K_c and pygame.key.get_mods() & KMOD_CTRL:
+			if event.key == pygame.K_c and pygame.key.get_mods() &  pygame.KMOD_CTRL:
 				self._keybd.set_moifier(False)
 			else:
 				self._keybd.key_up_ascii(event.key )
@@ -57,7 +63,6 @@ class Emulator:
 	def step(self, steps=1):
 		for i in range(steps):
 			isbp = self._cpu.step()
-			pygame.display.update()
 			if isbp and i < steps:
 					print ("breakpoint reached")
 					break
@@ -83,7 +88,8 @@ class Emulator:
 #		self._px_array = pygame.PixelArray(surface)
 #
 #		pygame.display.update()
-		fps_clock = pygame.time.Clock()
+		self.running = True
+#		fps_clock = pygame.time.Clock()
 #		while True:
 #			surface.fill(self.BLACK)
 		signal.signal(signal.SIGINT, handle_interrupt)
@@ -92,14 +98,19 @@ class Emulator:
 		while break_interrupt == False:
 			for event in pygame.event.get():
 				self._handle(event)
-
-			for i in range(32):
+#				print(event)
+			for i in range(128):
 				isbp,x = self.step()
 				if break_interrupt == True or isbp:
 					print ("breakpoint reached")
+					self.running = False
 					return True
 
-			fps_clock.tick(self._video._fps)
+			self._video._refresh()
+			self._video.fps_clock.tick(self._video._fps)
 			pygame.display.update()
+			pygame.display.flip()
+#			clock.tick(60)
 		signal.signal(signal.SIGINT, signal.SIG_DFL)
+		self.running = False
 		return -1

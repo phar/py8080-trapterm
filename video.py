@@ -16,9 +16,6 @@ SCALE_FACTOR = 1
 
 class TextVideoDisplay:
 	def __init__(self,emucpu, width=CHAR_RESOLUTION[0],height=CHAR_RESOLUTION[1]):
-		
-#		self._memory = cpu.RAM((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) * (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1])+1) #fixme
-#		self._memory = [0] * ((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) * (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1])+1)
 		self._char_rom = [self.open_rom("roms/90288-002.bin"),self.open_rom("roms/90288-003.bin")]
 		self._display_size = ((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) , (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1]))
 		pygame.init()
@@ -34,22 +31,18 @@ class TextVideoDisplay:
 		pygame.display.set_caption(caption)
 
 		pygame.display.update()
-#		fps_clock = pygame.time.Clock()
+		self.fps_clock = pygame.time.Clock()
 
 		self._width = width
 		self._height = height
-		self._fps = 30
+		self._fps = 60
 		self._char_rom_sel = 0
 		self._cpu = emucpu
 		self._base_page = 0x60 #0xC000
-#		self.base_address_end = 0x8fff
 		self._page_count = 4
 
-		self._cpu._memory.set_access_callback(self._base_page,self._page_count, self.display_access) #0xc000
-
-		#this is a terrible idea
-#		self._cpu.add_timer(self._cpu.freq/256, self.check_for_input) #interval is arbitrary for debugging
-
+#		self._cpu._memory.set_access_callback(self._base_page,self._page_count, self.display_access) #0xc000
+		self.px_array = pygame.PixelArray(self.surface)
 
 	def open_rom(self,path):
 		ret = []
@@ -67,7 +60,9 @@ class TextVideoDisplay:
 
 	def display_access(self, address, value, action):
 		if action == "w":
-			self._refresh()
+#			self._refresh()
+#			print("refresh 0x%04x" % address);
+
 			return value
 		else:
 			return self._cpu._memory.memory[address] 
@@ -98,7 +93,9 @@ class TextVideoDisplay:
 
 		:return:
 		"""
-		px_array = pygame.PixelArray(self.surface)
+#		px_array = pygame.PixelArray(self.surface)
+		px_array = self.px_array
+
 
 		for j in range(0, CHAR_RESOLUTION[1]):
 			for i in range(0, CHAR_RESOLUTION[0]):
@@ -117,5 +114,6 @@ class TextVideoDisplay:
 							else:
 								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = BLACK
 
-		del(px_array)
-		pygame.display.flip()
+#		del(px_array)
+#		pygame.display.flip()
+#		pygame.display.update()

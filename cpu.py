@@ -1,6 +1,8 @@
 import struct
 import io8080
 from opcodes import *
+import pickle
+import random
 
 class InvalidInstruction(Exception):
     pass
@@ -10,14 +12,15 @@ class StackException(Exception):
     pass
 
 
-MAX_CYCLES = 0x411B
+#MAX_CYCLES = 0x411B
 
 #logger = logging.getLogger('cpu')
 
 class RAM(list):
 	def __init__(self, size,pagesize=512):
 	  self.size = size + 1
-	  self.memory = [0] * (self.size)
+#	  self.memory = [0] * (self.size)
+	  self.memory = [random.randint(0,255) for x in range(self.size)]
 	  self.pagesize = pagesize
 	  self.access_callbacks = [None] * int((self.size/self.pagesize))
 
@@ -129,7 +132,7 @@ class CPU:
 				if not byte:
 					break
 				a, = struct.unpack('c', byte)
-				self._memory[idx] = ord(a)
+				self._memory.memory[idx] = ord(a)
 				idx+=1
 
 	def reset(self):
@@ -295,8 +298,8 @@ class CPU:
 					print("An error occurred while executing opcode %s at 0x%04x %s" % (instruction["opstr"], self.registers["pc"].value,args) )
 					print(f"An error occurred: {e}")
 
-				if len(instruction["arg"]) and instruction["type"] not in [TYPE_LOGIC_16,TYPE_MOVE_16]:
-					if instruction["type"]  == TYPE_LOGIC_8:
+				if instruction["type"] not in [TYPE_LOGIC_16,TYPE_MOVE_16]:
+					if instruction["type"]  in [TYPE_LOGIC_8, TYPE_COMPARE]:
 						carry_mask =  0x100
 						aux_carry_mask = 0x10
 
@@ -307,30 +310,31 @@ class CPU:
 						self.flag_state(FLAGS_AUXCARRY_FLAG, (result & aux_carry_mask) > 0)
 						self.flag_state(FLAGS_PARITY_FLAG,  bin(result).count('1') % 2)
 
-					if instruction["arg"][0] == "A":
-						self.registers["a"].value = result
-					elif instruction["arg"][0] == "SP":
-						self.registers["sp"].value  = result
-					elif instruction["arg"][0] == "B":
-						self.registers["bc"].value  &= 0x00ff
-						self.registers["bc"].value  |= result << 8
-					elif instruction["arg"][0] == "C":
-						self.registers["bc"].value  &= 0xff00
-						self.registers["bc"].value  |= result
-					elif instruction["arg"][0] == "H":
-						self.registers["hl"].value  &= 0x00ff
-						self.registers["hl"].value  |= result << 8
-					elif instruction["arg"][0] == "L":
-						self.registers["hl"].value  &= 0xff00
-						self.registers["hl"].value  |= result
-					elif instruction["arg"][0] == "D":
-						self.registers["de"].value  &= 0x00ff
-						self.registers["de"].value  |= result << 8
-					elif instruction["arg"][0] == "E":
-						self.registers["de"].value  &= 0xff00
-						self.registers["de"].value  |= result
-					elif instruction["arg"][0] == "M":
-						self._memory[self.registers["hl"].value] = result
+					if  len(instruction["arg"]) and instruction["type"]  in  [TYPE_LOGIC_8, TYPE_MOVE_8]:
+						if instruction["arg"][0] == "A":
+							self.registers["a"].value = result
+						elif instruction["arg"][0] == "SP":
+							self.registers["sp"].value  = result
+						elif instruction["arg"][0] == "B":
+							self.registers["bc"].value  &= 0x00ff
+							self.registers["bc"].value  |= result << 8
+						elif instruction["arg"][0] == "C":
+							self.registers["bc"].value  &= 0xff00
+							self.registers["bc"].value  |= result
+						elif instruction["arg"][0] == "H":
+							self.registers["hl"].value  &= 0x00ff
+							self.registers["hl"].value  |= result << 8
+						elif instruction["arg"][0] == "L":
+							self.registers["hl"].value  &= 0xff00
+							self.registers["hl"].value  |= result
+						elif instruction["arg"][0] == "D":
+							self.registers["de"].value  &= 0x00ff
+							self.registers["de"].value  |= result << 8
+						elif instruction["arg"][0] == "E":
+							self.registers["de"].value  &= 0xff00
+							self.registers["de"].value  |= result
+						elif instruction["arg"][0] == "M":
+							self._memory[self.registers["hl"].value] = result
 
 				elif len(instruction["arg"]) and instruction["type"] in [TYPE_LOGIC_16,TYPE_MOVE_16]:
 					if instruction["arg"][0] == "SP":
@@ -371,11 +375,29 @@ class CPU:
 		else:
 			print("Interrupt %d with interrupts disabled" % number)
 
+	def save_state(self,filename):
+#		try:
+			f = open(filename,"wb")
+			
+			pickle.dump({"registers":self.registers, "memory":self.memory.memory},f)
+			f.close()
+#		except:
+#			print("error saving")
+
+
+
+	def load_state(self,filename):
+#		try:
+			f = open(filename,"rb")
+			(self.registers, self.memory.memory) =  pickle.load(f)
+			f.close()
+#		except:
+#			print("error loading")
+
 
 	def _nop(self, op,  a0=None, a1=None):
 		return (op["c"][0], None)
 		
-
 	def _lxi(self, op,  a0=None, a1=None):
 		return (op["c"][0], a1)
 
@@ -384,7 +406,6 @@ class CPU:
 	
 	def _cpi(self, op,  a0=None, a1=None):
 		t = self.registers["a"].value - a0
-#		self.registers["a"].value = t
 		return (op["c"][0], t)
 
 	def _ani(self, op,  a0=None, a1=None):
@@ -444,23 +465,35 @@ class CPU:
 		self._memory[a0] = self.registers["a"].value
 		return (op["c"][0], None)
 		
-	def _ral(self, op,  a0=None, a1=None):
-		if self.registers["a"].value & 0x80:
-			c = 1
-		else:
-			c = 0
-		self.registers["a"].value = (self.registers["a"].value << 1) | self.get_flag(FLAGS_CARRY_FLAG)
-		self.flag_state(FLAGS_CARRY_FLAG,c)
-		return (op["c"][0], None)
-
+		
 	def _rar(self, op,  a0=None, a1=None):
 		if self.registers["a"].value & 0x01:
-			c = 1
+			t = 0x100 | (self.get_flag(FLAGS_CARRY_FLAG) << 7) | (self.registers["a"].value >> 1)
 		else:
-			c = 0
-		self.registers["a"].value = (self.registers["a"].value >> 1) | (self.get_flag(FLAGS_CARRY_FLAG) << 7)
-		self.flag_state(FLAGS_CARRY_FLAG,c)
-		return (op["c"][0], None)
+			t = (self.get_flag(FLAGS_CARRY_FLAG) << 7) | (self.registers["a"].value >> 1)
+
+		self.registers["a"].value = t
+		return (op["c"][0], t)
+		
+	def _ral(self, op,  a0=None, a1=None):
+		t = self.registers["a"].value << 1 | self.get_flag(FLAGS_CARRY_FLAG)
+		self.registers["a"].value = t
+		return (op["c"][0], t)
+
+		
+	def _rlc(self, op,  a0=None, a1=None):
+		t = self.registers["a"].value << 1
+		self.registers["a"].value = t
+		return (op["c"][0], t)
+
+	def _rrc(self, op,  a0=None, a1=None):
+		if self.registers["a"].value & 0x01:
+			t = 0x100 | (self.registers["a"].value >> 1)
+		else:
+			t = (self.registers["a"].value >> 1)
+
+		self.registers["a"].value = t
+		return (op["c"][0], t)
 
 	def _adi(self, op,  a0=None, a1=None):
 		t = self.registers["a"].value + a0
@@ -494,18 +527,6 @@ class CPU:
 			self.set_rom_short(self.registers["de"].value, self.registers["a"].value )
 			return (op["c"][0], self.registers["de"].value)
 
-	def _rrc(self, op,  a0=None, a1=None):
-		if self.registers["a"].value & 0x01:
-			c = 1
-		else:
-			c = 0
-		self.registers["a"].value = (self.registers["a"].value >> 1) | (c << 8)
-		return (op["c"][0], None)
-
-	def _rlc(self, op,  a0=None, a1=None):
-		t = (self.registers["a"].value << 1) | self.get_flag(FLAGS_CARRY_FLAG)
-		self.registers["a"].value  = t
-		return (op["c"][0], t)
 
 	def _jc(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_CARRY_FLAG):
@@ -534,7 +555,7 @@ class CPU:
 	def _jc(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_CARRY_FLAG):
 			self.registers["pc"].value = a0
-		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], none)
+		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
 
 	def _rst(self, op,  a0=None, a1=None):
 		self.registers["pc"].value = a0 * 8
@@ -563,16 +584,16 @@ class CPU:
 		return (op["c"][0], a0 + 1)
 
 
-	def _shld(self, op,  a0=None, a1=None): #fixme
-		self._memory[a0] = self.registers["hl"].value
+	def _shld(self, op,  a0=None, a1=None):
+		self.set_rom_short(a0,self.registers["hl"].value)
 		return (op["c"][0], None)
 
-	def _cma(self, op,  a0=None, a1=None): #fixme
+	def _cma(self, op,  a0=None, a1=None):
 		t =  ~self.registers["a"].value
 		self.registers["a"].value = t
 		return (op["c"][0], t)
 		
-	def _lhld(self, op,  a0=None, a1=None): #fixme
+	def _lhld(self, op,  a0=None, a1=None):
 		self.registers["hl"].value = self.fetch_rom_short(a0)
 		return (op["c"][0], None)
 
@@ -599,56 +620,65 @@ class CPU:
 	def _call(self, op,  a0=None, a1=None):
 		self._push(None, self.registers["pc"].value)
 		self.registers["pc"].value = a0
+		if op == None:
+			return
 		return (op["c"][0], None)
 		
 	def _cnz(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_ZERO_FLAG) == 0:
-			self._push(None, self.registers["pc"].value,None)
-			self.registers["pc"].value = a0
+			self._call(None,a0,None)
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 	def _cz(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_ZERO_FLAG) == 1:
-			self._push(None, self.registers["pc"].value)
-			self.registers["pc"].value = a0
+			self._call(None,a0,None)
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
+	def _cnc(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_CARRY_FLAG) == 0:
+			self._call(None,a0,None)
+		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
+
+	def _cc(self, op,  a0=None, a1=None):
+		if self.get_flag(FLAGS_CARRY_FLAG) == 1:
+			self._call(None,a0,None)
+		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 	def _cpe(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_PARITY_FLAG) == 1:
-			self._push(None, self.registers["pc"].value,None)
-			self.registers["pc"].value = a0
+			self._call(None,a0,None)
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 
 	def _cm(self, op,  a0=None, a1=None): #fixme
 		if self.get_flag(FLAGS_SIGN_FLAG) == 1:
-			self._push(None, self.registers["pc"].value,None)
-			self.registers["pc"].value = a0
+			self._call(None,a0,None)
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 	def _ret(self, op,  a0=None, a1=None):
 		self.registers["pc"].value = self._pop(None,None,None)
+		if  op == None:
+			return
 		return (op["c"][0], None)
 
 	def _rz(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_ZERO_FLAG) == 1:
-			self.registers["pc"].value = self._pop(None,None,None)
+			self._ret(None,None,None)
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 	def _rnz(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_ZERO_FLAG) == 0:
-			self.registers["pc"].value = self._pop(None,None,None)
+			self._ret(None,None,None)
 		return (op["c"][self.get_flag(FLAGS_ZERO_FLAG)], None)
 
 	def _rc(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_CARRY_FLAG) == 1:
-			self.registers["pc"].value = self._pop(None,None,None)
+			self._ret(None,None,None)
 		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
 
 	def _rnc(self, op,  a0=None, a1=None):
 		if self.get_flag(FLAGS_CARRY_FLAG) == 0:
-			self.registers["pc"].value = self._pop(None,None,None)
+			self._ret(None,None,None)
 		return (op["c"][self.get_flag(FLAGS_CARRY_FLAG)], None)
 
 

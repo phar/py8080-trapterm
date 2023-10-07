@@ -18,4 +18,4 @@ class Printer:
 		self._cpu._io.register_ioport(0x70,"r",self.printer_status)
 
 	def printer_status(self,port,mode, arg):
-		return 0x20 #fixme
+		return 0xc0 #fixme

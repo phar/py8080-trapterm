@@ -4,6 +4,7 @@ import printer
 import random
 import socket
 import threading
+import traceback
 import queue
 
 class Interface:
@@ -14,8 +15,8 @@ class Interface:
 		self.client_socket = None
 		self.server_thread = None
 		self._cpu = cpu
-		self.read_queue = queue.Queue()
-		self.write_queue = queue.Queue()
+		self.read_queue = queue.Queue(maxsize=0)
+		self.write_queue = queue.Queue(maxsize=0)
 #		self.start()
 		self._printerfile = printerfile
 		self.printer = printer.Printer(self._cpu); #printer hangs off interface card
@@ -24,7 +25,6 @@ class Interface:
 		self.status_reg = 0x40
 		self.txbuff = [0,0]
 
-		self._cpu._io.register_ioport(0x40,"r",self.unkstaussport)
 
 #		self._cpu._io.register_ioport(0x40,"w",self.dummyio)
 #		self._cpu._io.register_ioport(0x48,"w",self.dummyio)
@@ -32,14 +32,16 @@ class Interface:
 #		self._cpu._io.register_ioport(0x58,"r",self.dummyio)
 #		self._cpu._io.register_ioport(0x58,"w",self.dummyio)
 #		self._cpu._io.register_ioport(0x60,"r",self.dummyio)
+
 #		self._cpu._io.register_ioport(0x60,"w",self.dummyio)
 
 
 		self._cpu._io.register_ioport(0x68,"r",self.read_data)
+		self._cpu._io.register_ioport(0x40,"r",self.unkstaussport)
 
 
 		self._cpu._io.register_ioport(0x68,"w",self.tx_highreg)
-		self._cpu._io.register_ioport(0x78,"w",self.tx_lowreg)
+		self._cpu._io.register_ioport(0x78,"w",self.set_status)
 
 		self._cpu._io.register_ioport(0x70,"w",self.write_data)
 		
@@ -47,7 +49,7 @@ class Interface:
 
 
 
-#		self._cpu.add_timer(self._cpu.freq/256, self.check_for_input) #interval is arbitrary for debugging
+		self._cpu.add_timer(self._cpu.freq/64, self.check_for_input) #interval is arbitrary for debugging
 		self.debug_preload_queue()
 
 
@@ -58,19 +60,22 @@ class Interface:
 #		return
 
 	def tx_highreg(self,port,mode,data):
-		print("tx_high %02x" % data)
+#		print("tx_high %02x" % data)
+		pass
 
 	def tx_lowreg(self,port,mode,data):
-		print("tx_low %02x" % data)
+#		print("tx_low %02x" % data)
+		pass
 
 
 	def unkstaussport(self,port,mode,data):
 		if mode == "r":
-			return 0xff
+			return random.randint(0,4)
 
 	def debug_preload_queue(self):
 		f = open("dummy.txt","rb")
 		d = f.read(9999)
+		print(d)
 		for i in d:
 			self.read_queue.put(i)
 			
@@ -80,17 +85,27 @@ class Interface:
 
 	def set_status(self,port,mode,data):
 		self.status_reg  = data
+		print("status %02x" % data)
 		return data
 
 	def get_status(self,port,mode,data):
-		return 0x40 | random.randint(0,0x3f) #elf.status_reg
+#		return 0x40
+		return 0x00
 
 
 	def write_data(self,port,mode,data):
 		return data
 			
 	def read_data(self,port,mode,data):
-		return self.read_queue.get()
+#		for line in traceback.format_stack():
+#			print(line.strip())
+#		print("\n\n")
+		if not self.read_queue.empty():
+			return self.read_queue.get()
+		else:
+			self.debug_preload_queue()
+			return self.read_queue.get()
+
 
 
 	def dummyio(self,port,mode,data):
