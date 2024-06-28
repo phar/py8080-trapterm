@@ -18,20 +18,12 @@ class TextVideoDisplay:
 	def __init__(self,emucpu, width=CHAR_RESOLUTION[0],height=CHAR_RESOLUTION[1]):
 		self._char_rom = [self.open_rom("roms/90288-002.bin"),self.open_rom("roms/90288-003.bin")]
 		self._display_size = ((CHAR_RESOLUTION[0] * FONT_RESOLUTION[0]) , (CHAR_RESOLUTION[1] * FONT_RESOLUTION[1]))
-		pygame.init()
-		
 		
 		self.surface = pygame.display.set_mode(self._display_size)
 
 		self.surface.fill(BLACK)
 
-		self.CAPTION_FORMAT = 'TrapTerm: {}'
-
-		caption = self.CAPTION_FORMAT.format('')
-		pygame.display.set_caption(caption)
-
 		pygame.display.update()
-		self.fps_clock = pygame.time.Clock()
 
 		self._width = width
 		self._height = height
@@ -41,7 +33,6 @@ class TextVideoDisplay:
 		self._base_page = 0x60 #0xC000
 		self._page_count = 4
 
-#		self._cpu._memory.set_access_callback(self._base_page,self._page_count, self.display_access) #0xc000
 		self.px_array = pygame.PixelArray(self.surface)
 
 	def open_rom(self,path):
@@ -60,42 +51,17 @@ class TextVideoDisplay:
 
 	def display_access(self, address, value, action):
 		if action == "w":
-#			self._refresh()
-#			print("refresh 0x%04x" % address);
-
 			return value
 		else:
 			return self._cpu._memory.memory[address] 
-		
-	def yieldy_refresh(self):
 	
-		for j in range(0, CHAR_RESOLUTION[1]):
-			for i in range(0, CHAR_RESOLUTION[0]):
-				memaddr = 0xc000 + (j * CHAR_RESOLUTION[0]) + i
-				
-				for e in range(FONT_RESOLUTION[0]):
-					for o in range(8):
-						if self._char_rom[0][(self._cpu._memory.memory[memaddr] * 8)+o] & 0x01 << e:
-							px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o] = WHITE
-						else:
-							px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o] = BLACK
-
-						if o < 3:
-							if self._char_rom[1][(self._cpu._memory.memory[memaddr] * 8)+o] & 0x01 << e:
-								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = WHITE
-							else:
-								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = BLACK
-			yield
-
 	def _refresh(self):
 		"""
 		Update the pixel array
 
 		:return:
 		"""
-#		px_array = pygame.PixelArray(self.surface)
 		px_array = self.px_array
-
 
 		for j in range(0, CHAR_RESOLUTION[1]):
 			for i in range(0, CHAR_RESOLUTION[0]):
@@ -113,7 +79,3 @@ class TextVideoDisplay:
 								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = WHITE
 							else:
 								px_array[(i * FONT_RESOLUTION[0])+e][(j * FONT_RESOLUTION[1])+o+8] = BLACK
-
-#		del(px_array)
-#		pygame.display.flip()
-#		pygame.display.update()

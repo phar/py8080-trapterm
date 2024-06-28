@@ -514,17 +514,17 @@ class CPU:
 
 	def _ldax(self, op,  a0=None, a1=None):
 		if op["arg"][0] == "B":
-			self.registers["a"].value = self.fetch_rom_short(self.registers["bc"].value)
+			self.registers["a"].value = self.fetch_rom_byte(self.registers["bc"].value)
 		elif op["arg"][0] == "D":
-			self.registers["a"].value = self.fetch_rom_short(self.registers["de"].value)
+			self.registers["a"].value = self.fetch_rom_byte(self.registers["de"].value)
 		return (op["c"][0], a0)
 
 	def _stax(self, op,  a0=None, a1=None):
 		if op["arg"][0] == "B":
-			self.set_rom_short(self.registers["bc"].value, self.registers["a"].value )
+			self.set_rom_byte(self.registers["bc"].value, self.registers["a"].value )
 			return (op["c"][0], self.registers["bc"].value)
 		elif op["arg"][0] == "D":
-			self.set_rom_short(self.registers["de"].value, self.registers["a"].value )
+			self.set_rom_byte(self.registers["de"].value, self.registers["a"].value )
 			return (op["c"][0], self.registers["de"].value)
 
 
@@ -583,15 +583,14 @@ class CPU:
 	def _inr(self, op,  a0=None, a1=None):
 		return (op["c"][0], a0 + 1)
 
-
-	def _shld(self, op,  a0=None, a1=None):
-		self.set_rom_short(a0,self.registers["hl"].value)
-		return (op["c"][0], None)
-
 	def _cma(self, op,  a0=None, a1=None):
 		t =  ~self.registers["a"].value
 		self.registers["a"].value = t
 		return (op["c"][0], t)
+
+	def _shld(self, op,  a0=None, a1=None):
+		self.set_rom_short(a0,self.registers["hl"].value)
+		return (op["c"][0], None)
 		
 	def _lhld(self, op,  a0=None, a1=None):
 		self.registers["hl"].value = self.fetch_rom_short(a0)
@@ -683,12 +682,12 @@ class CPU:
 
 
 	def _out(self, op,  a0=None, a1=None):
-		print("out %02x %02x" % (a0,self.registers["a"].value))
+#		print("out %02x %02x" % (a0,self.registers["a"].value))
 		self._io.output(a0, self.registers["a"].value)
 		return (op["c"][0],  self.registers["a"].value)
 		
 	def _in(self, op,  a0=None, a1=None):
-		print("in %02x" % (a0))
+#		print("in %02x" % (a0))
 		self.registers["a"].value = self._io.input(a0)
 		return (op["c"][0], None)
 

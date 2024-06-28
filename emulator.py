@@ -12,7 +12,7 @@ import json
 #MIN_HEIGHT = 224
 CLOCK_FREQ = 4000000
 
-
+import pygame
 def handle_interrupt(signal, frame):
 	print("\nKeyboard interrupt received.")
 	global break_interrupt
@@ -21,43 +21,66 @@ def handle_interrupt(signal, frame):
     
 
 class Emulator:
-	def __init__(self):
+	def __init__(self,profile="entrex.def"):
+		pygame.init()
+		pygame.mixer.init()
+
+		self.fps_clock = pygame.time.Clock()
+
 		self._cpu = cpu.CPU(self, freq=CLOCK_FREQ)
 		self._video = video.TextVideoDisplay(self._cpu);
 		self._interface = interface.Interface(self._cpu)
 		self._keybd = keybd.Keyboard(self._cpu,interrupt=0x04)
-#			self._cpu.load_rom(0x0000,path)
-
 		self.running = False
-		self._cpu.load_rom(0x0000,"roms/06204.035.bin")
-		self._cpu.load_rom(0x0400,"roms/06204.036.bin")
+		
+		try:
+			f = open(profile,"r")
+			self.profile = json.load(f)
+			f.close()
+		except:
+				self.profile = {}
+
+		#onboard rom sockets
+		if "BOOT_ROM_LOW" in  self.profile and self.profile["BOOT_ROM_LOW"] != "":
+			self._cpu.load_rom(0x0000, self.profile["BOOT_ROM_LOW"])
+		if "BOOT_ROM_HIGH" in  self.profile and self.profile["BOOT_ROM_HIGH"] != "":
+			self._cpu.load_rom(0x0400,self.profile["BOOT_ROM_HIGH"])
 		self._cpu._memory.set_access_callback(0,4, self.read_only_memory) #0x0000
 
+		#ram/rom card sockets
+		if "AUX_ROM_SLOT_0" in  self.profile and self.profile["AUX_ROM_SLOT_0"] != "":
+			self._cpu.load_rom(0x0800,self.profile["AUX_ROM_SLOT_0"])
+		if "AUX_ROM_SLOT_1" in  self.profile and self.profile["AUX_ROM_SLOT_1"] != "":
+			self._cpu.load_rom(0x0900,self.profile["AUX_ROM_SLOT_1"])
+		if"AUX_ROM_SLOT_2" in  self.profile and  self.profile["AUX_ROM_SLOT_2"] != "":
+			self._cpu.load_rom(0x9a00,self.profile["AUX_ROM_SLOT_2"])
+		if "AUX_ROM_SLOT_3" in  self.profile and self.profile["AUX_ROM_SLOT_3"] != "":
+			self._cpu.load_rom(0x0b00,self.profile["AUX_ROM_SLOT_3"])
+		if "AUX_ROM_SLOT_4" in  self.profile and self.profile["AUX_ROM_SLOT_4"] != "":
+			self._cpu.load_rom(0x0c00,self.profile["AUX_ROM_SLOT_4"])
+		if "AUX_ROM_SLOT_5" in  self.profile and  self.profile["AUX_ROM_SLOT_5"] != "":
+			self._cpu.load_rom(0x0d00,self.profile["AUX_ROM_SLOT_5"])
+		self._cpu._memory.set_access_callback(4,10, self.read_only_memory) #0x0000
 
-#		self._cpu.load_rom(0x0000,"roms/debug.bin")
 
 	def read_only_memory(self, address, value, action):
-#		if action == "w":
 		return self._cpu._memory.memory[address]
-
-	def dummytimer(self,emu):
-		print("beep")
 
 	def _handle(self, event):
 		if event.type == pygame.QUIT:
 			exit()
 
 		if event.type == pygame.KEYDOWN:
-			if event.key == pygame.K_c and pygame.key.get_mods() &  pygame.KMOD_CTRL:
-				self._keybd.set_moifier(True)
-			else:
-				self._keybd.key_down_ascii(event.key)
+#			if event.key == pygame.K_c and pygame.key.get_mods() &  pygame.KMOD_CTRL:
+#				self._keybd.set_moifier(True)
+#			else:
+				self._keybd.key_down_event(event)
 
 		if event.type == pygame.KEYUP:
-			if event.key == pygame.K_c and pygame.key.get_mods() &  pygame.KMOD_CTRL:
-				self._keybd.set_moifier(False)
-			else:
-				self._keybd.key_up_ascii(event.key )
+#			if event.key == pygame.K_c and pygame.key.get_mods() &  pygame.KMOD_CTRL:
+#				self._keybd.set_moifier(False)
+#			else:
+				self._keybd.key_up_event(event)
 
 		
 	def step(self, steps=1):
@@ -68,8 +91,6 @@ class Emulator:
 					break
 
 		return isbp, self._cpu.disassemble_current_instruction(self._cpu.registers["pc"].value) 
-
-
 
 	
 	def run(self, debug=False):
@@ -107,7 +128,7 @@ class Emulator:
 					return True
 
 			self._video._refresh()
-			self._video.fps_clock.tick(self._video._fps)
+			self.fps_clock.tick(self._video._fps)
 			pygame.display.update()
 			pygame.display.flip()
 #			clock.tick(60)

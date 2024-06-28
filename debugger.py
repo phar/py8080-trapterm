@@ -24,15 +24,15 @@ class Debugger(cmd.Cmd):
 		if self.emu.running == False:
 			for event in pygame.event.get():
 				pygame.event.get()
-			self.emu._video.fps_clock.tick(self.emu._video._fps)
+			self.emu.fps_clock.tick(self.emu._video._fps)
 			pygame.display.update()
 			pygame.display.flip()
 			
 	def __init__(self,emu):
 		super().__init__()
 		self.emu=emu
-		timer = threading.Timer(.2, self.handle_inputs_while_debuggins)
-		timer.start()		# Set up the signal handler for Ctrl+C
+#		timer = threading.Timer(.2, self.handle_inputs_while_debuggins)
+#		timer.start()		# Set up the signal handler for Ctrl+C
 
 	def do_hexload(self,arg):
 		try:
@@ -111,7 +111,10 @@ class Debugger(cmd.Cmd):
 			self.emu._cpu.breakpoints.append(bp)
 		else:
 			print("bad bp")
-			
+
+	def do_clear(self, arg):
+		self.emu._cpu.breakpoints = []
+		
 	def do_registers(self, arg):
 		r = self.emu._cpu.get_regs()
 		i = 0
@@ -166,6 +169,9 @@ class Debugger(cmd.Cmd):
 	def do_reset(self,args):
 		self.emu._cpu.reset()
 		
+	def do_quit(self,args):
+		pygame.quit()
+		
 	def do_hexdump(self,args):
 		try:
 			(offset,length) = args.split(" ")
@@ -174,9 +180,6 @@ class Debugger(cmd.Cmd):
 		except ValueError:
 			print("not enough arguments provided")
 			return False
-
-		print(offset)
-		print(length)
 		copyout = []
 		for i in range(offset,offset+length):
 			a = self.emu._cpu._memory.memory[i]

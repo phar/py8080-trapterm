@@ -6,6 +6,32 @@ import socket
 import threading
 import traceback
 import queue
+import os
+
+STATE_BIT_SET_DATA_OUT 			= 0b00000001
+
+STATE_BIT_CLEAR_DATA_LATCH 		= 0b00000010
+
+STATE_BIT_CLEAR_CMD_BYTE_LATCH 	= 0b00000100
+
+STATE_BIT_DATA_WAITING 			= 0b00001000
+
+
+STATE_BIT_04 = 0b00010000 				#set and reset term selected
+STATE_BIT_05 = 0b00100000
+STATE_BIT_06 = 0b01000000
+STATE_BIT_07 = 0b10000000
+
+
+#the printer will have its own version of these status bits
+STATUS_BIT_TERM_SELECTED_S0 		= 0b00000001
+STATUS_BIT_TERM_SELECTED_S1 		= 0b10000010
+STATUS_BIT_DATA_REQUEST_DATA		= 0b10100000
+STATUS_BIT_DATA_STILL_WAITING		= 0b01000000
+STATUS_BIT_8BITS_READY 				= 0b10000000
+
+
+
 
 class Interface:
 	def __init__(self,cpu, host="localhost",interrupt=0x05, port=2323,printerfile="printer.out"):
@@ -16,56 +42,90 @@ class Interface:
 		self.server_thread = None
 		self._cpu = cpu
 		self.read_queue = queue.Queue(maxsize=0)
-		self.write_queue = queue.Queue(maxsize=0)
+#		self.write_queue = queue.Queue(maxsize=0)
 #		self.start()
 		self._printerfile = printerfile
 		self.printer = printer.Printer(self._cpu); #printer hangs off interface card
 		self.interrupt = interrupt
 		
+		
+		self.tx_lowreg = 0
+		self.tx_highreg = 0
+
 		self.status_reg = 0x40
+		self.state_reg = 0x40
 		self.txbuff = [0,0]
 
+		self.rxbuff = 0
+		self.rxcmd = 0
+		
+		self.s0_state_preset = 0
+		self.s1_state_preset = 0
 
-#		self._cpu._io.register_ioport(0x40,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x40,"w",self.dummyio) #only to "floppy" slot
+#		self._cpu._io.register_ioport(0x40,"r",self.unkstaussport)
+
 #		self._cpu._io.register_ioport(0x48,"w",self.dummyio)
-#		self._cpu._io.register_ioport(0x50,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x50,"w",self.dummyio) //light or spkr
 #		self._cpu._io.register_ioport(0x58,"r",self.dummyio)
 #		self._cpu._io.register_ioport(0x58,"w",self.dummyio)
 #		self._cpu._io.register_ioport(0x60,"r",self.dummyio)
-
 #		self._cpu._io.register_ioport(0x60,"w",self.dummyio)
+#		self._cpu._io.register_ioport(0x68,"r",self.read_data)
 
 
-		self._cpu._io.register_ioport(0x68,"r",self.read_data)
-		self._cpu._io.register_ioport(0x40,"r",self.unkstaussport)
 
+		self._cpu._io.register_ioport(0x70,"r",self.read_printer_status)
+		self._cpu._io.register_ioport(0x70,"w",self.tx_high)
 
-		self._cpu._io.register_ioport(0x68,"w",self.tx_highreg)
-		self._cpu._io.register_ioport(0x78,"w",self.set_status)
+		self._cpu._io.register_ioport(0x68,"w",self.tx_low)
 
-		self._cpu._io.register_ioport(0x70,"w",self.write_data)
-		
 		self._cpu._io.register_ioport(0x78,"r",self.get_status)
+		self._cpu._io.register_ioport(0x78,"w",self.set_state)
+		
 
 
-
-		self._cpu.add_timer(self._cpu.freq/64, self.check_for_input) #interval is arbitrary for debugging
+#
+#		self._cpu.add_timer(self._cpu.freq/64, self.check_for_input) #interval is arbitrary for debugging
 		self.debug_preload_queue()
 
+	def read_printer_status(self,port,mode,data):
+		return 0xff
 
-#	def read_keyboardstate_latchself,port,mode,data):
-#		#0x40 KEY LATCHED
-#		#lower 3 bits are status
-#		#fixme
-#		return
+	def set_state(self,port,mode,data):
+		if data & STATE_BIT_CLEAR_DATA_LATCH:
+			self.status_reg ^= ~STATUS_BIT_8BITS_READY
+			
+		if data & STATE_BIT_DATA_WAITING:
+			self.status_reg ^= ~STATUS_BIT_TERMIANL_OUTPUT_WAITING
+			
+		if not ((data & STATE_BIT_06) > 0) and ((data & STATE_BIT_07) > 0):
+			self.s1_state_preset ^= 1#toggle
+		else: #q = K
+			self.s1_state_preset = (data & STATE_BIT_06) > 0
 
-	def tx_highreg(self,port,mode,data):
-#		print("tx_high %02x" % data)
-		pass
+		if not ((data & STATE_BIT_04) > 0) and ((data & STATE_BIT_05) > 0):
+			self.s0_state_preset ^= 1 #toggle
+		else: #q = K
+			self.s0_state_preset = (data & STATE_BIT_06) > 0
 
-	def tx_lowreg(self,port,mode,data):
-#		print("tx_low %02x" % data)
-		pass
+
+
+
+	def reset_state_machine(self):
+		self.status_reg ^= ~STATUS_BIT_TERMIANL_OUTPUT_WAITING
+		self.status_reg |= (self.s1_state_preset << 1)
+		self.status_reg |= (self.s0_state_preset)
+
+	def get_status(self,port,mode,data):
+		return self.status_reg
+
+	def tx_low(self,port,mode,data):
+		self.status_reg |= STATUS_BIT_TERMIANL_OUTPUT_WAITING
+		self.tx_lowreg = data
+	
+	def tx_high(self,port,mode,data):
+		self.tx_highreg = data
 
 
 	def unkstaussport(self,port,mode,data):
@@ -73,38 +133,45 @@ class Interface:
 			return random.randint(0,4)
 
 	def debug_preload_queue(self):
-		f = open("dummy.txt","rb")
-		d = f.read(9999)
-		print(d)
-		for i in d:
-			self.read_queue.put(i)
-			
+		f = open("dummy.dat","rb")
+		for i in range(int(os.path.getsize("dummy.dat")/2)):
+			c = f.read(1)
+			d = f.read(1)
+			self.read_queue.put((c,d))
+		f.close()
+		
+				
 	def check_for_input(self,emu):
-		if not self.read_queue.empty():
-			emu._cpu.call_interrupt(self.interrupt)
-
-	def set_status(self,port,mode,data):
-		self.status_reg  = data
-		print("status %02x" % data)
-		return data
-
-	def get_status(self,port,mode,data):
-#		return 0x40
-		return 0x00
-
-
-	def write_data(self,port,mode,data):
-		return data
+		if not self.read_queue.empty() and (self.status & STATUS_BIT_8BITS_READY) == 0:
+			(self.rxcmd, self.rxbuff) = self.read_queue.get()
 			
-	def read_data(self,port,mode,data):
-#		for line in traceback.format_stack():
-#			print(line.strip())
-#		print("\n\n")
-		if not self.read_queue.empty():
-			return self.read_queue.get()
+			self.status |= STATUS_BIT_8BITS_READY
+			
+			if self.rxcmd == 0:
+				self.status |= self.s0_state_preset
+			elif self.rxcmd == 1:
+				self.status |= self.s1_state_preset << 1
+			elif self.rxcmd == 2:
+				emu._cpu.call_interrupt(self.interrupt)
+			elif self.rxcmd == 3:
+				pass #request for data
 		else:
 			self.debug_preload_queue()
-			return self.read_queue.get()
+			return self.read_data(port,mode,data)
+
+
+
+#	def check_for_output(self,emu):
+#		if not self.write_queue.empty() and not (self.status & STATUS_BIT_DATA_STILL_WAITING) == 0:
+#			pass
+#			#tx low
+#			#tx high
+			
+	def read_data(self,port,mode,data):
+		self.status_reg ^= ~STATUS_BIT_8BITS_READY
+		return self.rxbuff
+			
+			
 
 
 

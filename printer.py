@@ -14,8 +14,7 @@ SCALE_FACTOR = 4
 class Printer:
 	def __init__(self,emucpu):
 		self._cpu = emucpu
-
 		self._cpu._io.register_ioport(0x70,"r",self.printer_status)
 
 	def printer_status(self,port,mode, arg):
-		return 0xc0 #fixme
+		return 0x02 #fixme

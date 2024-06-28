@@ -17,7 +17,6 @@ def main():
 		emu = Emulator()
 
 
-	d  = Debugger(emu) #might want a run flag to just run without debugger
 	demu  = Debugger(emu) #might want a run flag to just run without debugger
 	demu.cmdloop()
 
